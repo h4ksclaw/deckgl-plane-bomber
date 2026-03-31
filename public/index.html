@@ -482,6 +482,8 @@
         paint: {
           'fill-extrusion-color': [
             'case',
+            ['boolean', ['feature-state', 'destroyed']],
+              '#444',
             ['==', ['get', 'colour'], 'white'],    '#f0ece8',
             ['==', ['get', 'colour'], 'beige'],    '#e8dcc8',
             ['==', ['get', 'colour'], 'red'],      '#b55a5a',
@@ -496,13 +498,20 @@
               0, '#c8c0b4', 30, '#b0a89c', 80, '#9a9088', 150, '#847c74', 300, '#6e6862',
             ],
           ],
-          'fill-extrusion-height': ['get', 'render_height'],
-          'fill-extrusion-base': ['get', 'render_min_height'],
+          'fill-extrusion-height': [
+            'case',
+            ['boolean', ['feature-state', 'destroyed']],
+              0,
+            ['coalesce', ['feature-state', 'height'], ['get', 'render_height']],
+          ],
+          'fill-extrusion-base': [
+            'case',
+            ['boolean', ['feature-state', 'destroyed']],
+              0,
+            ['coalesce', ['feature-state', 'base'], ['get', 'render_min_height']],
+          ],
           'fill-extrusion-opacity': 0.95,
         },
-        // Filter out destroyed buildings using feature state
-        // feature-state returns null for unset state, so we check != true
-        filter: ['!=', ['boolean', ['feature-state', 'destroyed']], true],
       });
     }
 
@@ -564,6 +573,9 @@
   // ============================================================
   map.on('click', function(e) {
     initAudio();
+
+    // Don't process clicks while layer isn't ready
+    if (!map.getLayer('3d-buildings')) return;
 
     var features = map.queryRenderedFeatures(e.point, {
       layers: ['3d-buildings'],
@@ -658,6 +670,7 @@
   // CURSOR — show monster emoji on hover over buildings
   // ============================================================
   map.on('mousemove', function(e) {
+    if (!map.getLayer('3d-buildings')) return;
     var features = map.queryRenderedFeatures(e.point, {
       layers: ['3d-buildings'],
     });
