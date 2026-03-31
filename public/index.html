@@ -695,6 +695,36 @@
       });
       map.setTerrain({ source: 'terrain', exaggeration: 1.5 });
     }
+    // Political/borders overlay — visible at low zoom, fades out as you zoom in
+    if (!map.getSource('political')) {
+      map.addSource('political', {
+        type: 'raster',
+        tiles: [
+          'https://api.maptiler.com/maps/basic-v2/{z}/{x}/{y}.png?key=' + KEY,
+        ],
+        tileSize: 256,
+        minzoom: 0,
+        maxzoom: 14,
+      });
+    }
+    if (!map.getLayer('political-layer')) {
+      map.addLayer({
+        id: 'political-layer',
+        type: 'raster',
+        source: 'political',
+        paint: {
+          'raster-opacity': [
+            'interpolate', ['linear'], ['zoom'],
+            0, 1,
+            6, 1,
+            9, 0.6,
+            11, 0,
+          ],
+          'raster-saturation': 0.3,
+          'raster-brightness-max': 1,
+        },
+      });
+    }
     if (!map.getSource('buildings')) {
       map.addSource('buildings', {
         type: 'vector',
@@ -827,10 +857,17 @@
     }
   }
 
-  // Terrain zoom adjustment
+  // Terrain zoom adjustment — reduce at high zoom (tile limit) AND low zoom (political view)
   map.on('zoom', function() {
     var z = map.getZoom();
-    var exag = z > 15 ? Math.max(0.3, 1.5 - (z - 15) * 0.25) : 1.5;
+    var exag;
+    if (z < 10) {
+      exag = 0.3; // flat for political view
+    } else if (z > 15) {
+      exag = Math.max(0.3, 1.5 - (z - 15) * 0.25);
+    } else {
+      exag = 0.3 + (z - 10) * (1.2 / 5); // ramp up 0.3 -> 1.5 between z10-z15
+    }
     if (map.getSource('terrain')) map.setTerrain({ source: 'terrain', exaggeration: exag });
   });
 
