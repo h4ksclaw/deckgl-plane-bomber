@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>KAIJU CRUSH 🦖</title>
+  <title>SKY RAIDER 🛩️</title>
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; cursor: crosshair; }
+    body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; cursor: default; }
     #map { width: 100vw; height: 100vh; }
 
     #particles {
@@ -18,6 +18,7 @@
       z-index: 5;
     }
 
+    /* HUD — top left */
     #hud {
       position: fixed;
       top: 16px; left: 16px;
@@ -27,45 +28,159 @@
       pointer-events: none;
     }
     #hud h1 {
-      font-size: 28px;
+      font-size: 24px;
       font-weight: 800;
-      letter-spacing: 2px;
-      margin-bottom: 4px;
+      letter-spacing: 3px;
+      margin-bottom: 2px;
+      color: #ffcc00;
     }
-    #score {
-      font-size: 48px;
-      font-weight: 900;
-      line-height: 1;
-      transition: transform 0.1s;
+    #hud .subtitle {
+      font-size: 12px;
+      opacity: 0.6;
+      letter-spacing: 1px;
     }
-    #score.pop { transform: scale(1.2); }
-    #combo {
-      font-size: 18px;
-      font-weight: 700;
-      color: #ff6b35;
-      min-height: 24px;
-    }
-    #stats {
+    .hud-row {
+      display: flex;
+      gap: 20px;
       margin-top: 8px;
+    }
+    .hud-stat {
+      background: rgba(0,0,0,0.5);
+      padding: 6px 12px;
+      border-radius: 6px;
       font-size: 13px;
-      opacity: 0.8;
+      backdrop-filter: blur(4px);
+    }
+    .hud-stat .val {
+      font-size: 22px;
+      font-weight: 800;
+      display: block;
+      line-height: 1.1;
+    }
+    .hud-stat .label {
+      font-size: 10px;
+      opacity: 0.6;
+      text-transform: uppercase;
+      letter-spacing: 1px;
     }
 
-    #hint {
+    /* Crosshair */
+    #crosshair {
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 10;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    #crosshair.active { opacity: 0.8; }
+    #crosshair svg { width: 60px; height: 60px; }
+
+    /* Bomb indicator */
+    #bombs-hud {
       position: fixed;
       bottom: 24px;
       left: 50%;
       transform: translateX(-50%);
       z-index: 10;
-      background: rgba(0,0,0,0.7);
-      color: #fff;
-      padding: 8px 20px;
-      border-radius: 20px;
-      font-size: 14px;
+      display: flex;
+      gap: 6px;
       pointer-events: none;
-      backdrop-filter: blur(8px);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    #bombs-hud.active { opacity: 1; }
+    .bomb-icon {
+      width: 12px; height: 12px;
+      background: #333;
+      border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+      border: 1px solid #555;
+      transition: all 0.3s;
+    }
+    .bomb-icon.used {
+      background: #111;
+      border-color: #222;
+      opacity: 0.3;
     }
 
+    /* Takeoff button */
+    #takeoff-btn {
+      position: fixed;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 15;
+      background: linear-gradient(135deg, #ff6b35, #e63946);
+      color: #fff;
+      border: none;
+      padding: 14px 36px;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      border-radius: 8px;
+      cursor: pointer;
+      text-transform: uppercase;
+      box-shadow: 0 4px 20px rgba(255,107,53,0.4);
+      transition: all 0.2s;
+      pointer-events: auto;
+    }
+    #takeoff-btn:hover {
+      transform: translateX(-50%) scale(1.05);
+      box-shadow: 0 6px 30px rgba(255,107,53,0.6);
+    }
+    #takeoff-btn.hidden { display: none; }
+
+    /* Mode indicator */
+    #mode-indicator {
+      position: fixed;
+      top: 16px;
+      right: 80px;
+      z-index: 10;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      pointer-events: none;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+    }
+    #mode-indicator.navigate {
+      background: rgba(0,0,0,0.5);
+      color: #88cc88;
+    }
+    #mode-indicator.bombing {
+      background: rgba(255,50,50,0.6);
+      color: #fff;
+      animation: pulse-red 1s infinite;
+    }
+    @keyframes pulse-red {
+      0%, 100% { box-shadow: 0 0 10px rgba(255,0,0,0.3); }
+      50% { box-shadow: 0 0 20px rgba(255,0,0,0.6); }
+    }
+
+    /* Flight info bar */
+    #flight-bar {
+      position: fixed;
+      bottom: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      display: flex;
+      gap: 24px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+      color: #fff;
+      font-size: 12px;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+    }
+    #flight-bar.active { opacity: 0.8; }
+    #flight-bar .fi { text-align: center; }
+    #flight-bar .fi .fv { font-size: 18px; font-weight: 800; }
+
+    /* Score popup */
     .screen-shake {
       animation: shake 0.3s ease-out;
     }
@@ -76,7 +191,6 @@
       60% { transform: translate(-4px, 2px); }
       80% { transform: translate(3px, -3px); }
     }
-
     .flash {
       position: fixed;
       top: 0; left: 0;
@@ -90,6 +204,59 @@
       from { opacity: 1; }
       to { opacity: 0; }
     }
+
+    /* Run summary overlay */
+    #run-summary {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background: rgba(0,0,0,0.7);
+      z-index: 20;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      backdrop-filter: blur(6px);
+    }
+    #run-summary.active { display: flex; }
+    #run-summary .card {
+      background: rgba(20,20,30,0.95);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      padding: 40px 50px;
+      text-align: center;
+      color: #fff;
+      min-width: 320px;
+    }
+    #run-summary .card h2 {
+      font-size: 28px;
+      font-weight: 800;
+      color: #ffcc00;
+      letter-spacing: 2px;
+      margin-bottom: 20px;
+    }
+    #run-summary .card .stat-line {
+      font-size: 16px;
+      margin: 8px 0;
+      opacity: 0.8;
+    }
+    #run-summary .card .stat-line span {
+      font-weight: 800;
+      color: #fff;
+    }
+    #run-summary .card button {
+      margin-top: 24px;
+      background: linear-gradient(135deg, #ff6b35, #e63946);
+      color: #fff;
+      border: none;
+      padding: 12px 30px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      border-radius: 6px;
+      cursor: pointer;
+      text-transform: uppercase;
+    }
+    #run-summary .card button:hover { transform: scale(1.05); }
   </style>
 </head>
 <body>
@@ -97,18 +264,62 @@
   <canvas id="particles"></canvas>
 
   <div id="hud">
-    <h1>🦖 KAIJU CRUSH</h1>
-    <div id="score">0</div>
-    <div id="combo"></div>
-    <div id="stats">Buildings destroyed: <span id="destroyed-count">0</span></div>
+    <h1>✈️ SKY RAIDER</h1>
+    <div class="subtitle">BOMBER SIMULATOR</div>
+    <div class="hud-row">
+      <div class="hud-stat">
+        <span class="val" id="score">0</span>
+        <span class="label">Score</span>
+      </div>
+      <div class="hud-stat">
+        <span class="val" id="destroyed-count">0</span>
+        <span class="label">Destroyed</span>
+      </div>
+      <div class="hud-stat">
+        <span class="val" id="runs-count">0</span>
+        <span class="label">Runs</span>
+      </div>
+    </div>
   </div>
 
-  <div id="hint">🖱️ Click buildings to destroy them • Scroll to zoom • Drag to move</div>
+  <div id="mode-indicator" class="navigate">🔍 Navigate</div>
+
+  <div id="crosshair">
+    <svg viewBox="0 0 60 60" fill="none" stroke="#ff4444" stroke-width="1.5">
+      <circle cx="30" cy="30" r="20" opacity="0.5"/>
+      <line x1="30" y1="2" x2="30" y2="18"/>
+      <line x1="30" y1="42" x2="30" y2="58"/>
+      <line x1="2" y1="30" x2="18" y2="30"/>
+      <line x1="42" y1="30" x2="58" y2="30"/>
+      <circle cx="30" cy="30" r="3" fill="#ff4444"/>
+    </svg>
+  </div>
+
+  <div id="bombs-hud"></div>
+
+  <div id="flight-bar">
+    <div class="fi"><div class="fv" id="fi-speed">0</div>Speed</div>
+    <div class="fi"><div class="fv" id="fi-alt">0</div>Alt</div>
+    <div class="fi"><div class="fv" id="fi-bearing">0°</div>Bearing</div>
+  </div>
+
+  <button id="takeoff-btn" onclick="startBombingRun()">🛩️ TAKE OFF</button>
+
+  <div id="run-summary">
+    <div class="card">
+      <h2>MISSION COMPLETE</h2>
+      <div class="stat-line">Score: <span id="rs-score">0</span></div>
+      <div class="stat-line">Buildings destroyed: <span id="rs-destroyed">0</span></div>
+      <div class="stat-line">Bombs dropped: <span id="rs-bombs">0</span></div>
+      <div class="stat-line">Accuracy: <span id="rs-accuracy">0%</span></div>
+      <button onclick="closeSummary()">CONTINUE</button>
+    </div>
+  </div>
 
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script>
   // ============================================================
-  // AUDIO ENGINE — procedural explosion sounds
+  // AUDIO ENGINE — procedural explosions
   // ============================================================
   var audioCtx = null;
 
@@ -121,9 +332,9 @@
   function generateExplosion(height) {
     if (!audioCtx) return;
     var t = audioCtx.currentTime;
-    var scale = Math.min(1, Math.max(0.3, height / 150)); // 0.3 for small, 1.0 for massive
+    var scale = Math.min(1, Math.max(0.3, height / 150));
 
-    // 1. Sub-bass thump — deep impact
+    // Sub-bass thump
     var osc = audioCtx.createOscillator();
     osc.type = 'sine';
     osc.frequency.setValueAtTime(80 * scale, t);
@@ -131,12 +342,10 @@
     var subGain = audioCtx.createGain();
     subGain.gain.setValueAtTime(0.8 * scale, t);
     subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
-    osc.connect(subGain);
-    subGain.connect(audioCtx.destination);
-    osc.start(t);
-    osc.stop(t + 0.4);
+    osc.connect(subGain); subGain.connect(audioCtx.destination);
+    osc.start(t); osc.stop(t + 0.4);
 
-    // 2. Noise burst — the crunch/bang
+    // Noise burst
     var noiseLen = Math.floor(audioCtx.sampleRate * (0.15 + scale * 0.25));
     var noiseBuf = audioCtx.createBuffer(1, noiseLen, audioCtx.sampleRate);
     var noiseData = noiseBuf.getChannelData(0);
@@ -145,7 +354,6 @@
     }
     var noiseSrc = audioCtx.createBufferSource();
     noiseSrc.buffer = noiseBuf;
-    // Lowpass for heavy rumble (lower = heavier)
     var lpf = audioCtx.createBiquadFilter();
     lpf.type = 'lowpass';
     lpf.frequency.setValueAtTime(800 + scale * 1200, t);
@@ -153,12 +361,10 @@
     var noiseGain = audioCtx.createGain();
     noiseGain.gain.setValueAtTime(0.7 * scale, t);
     noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 0.2 + scale * 0.2);
-    noiseSrc.connect(lpf);
-    lpf.connect(noiseGain);
-    noiseGain.connect(audioCtx.destination);
+    noiseSrc.connect(lpf); lpf.connect(noiseGain); noiseGain.connect(audioCtx.destination);
     noiseSrc.start(t);
 
-    // 3. Mid-range boom
+    // Mid boom
     var osc2 = audioCtx.createOscillator();
     osc2.type = 'triangle';
     osc2.frequency.setValueAtTime(150, t);
@@ -166,58 +372,47 @@
     var boomGain = audioCtx.createGain();
     boomGain.gain.setValueAtTime(0.5 * scale, t);
     boomGain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
-    osc2.connect(boomGain);
-    boomGain.connect(audioCtx.destination);
-    osc2.start(t);
-    osc2.stop(t + 0.25);
+    osc2.connect(boomGain); boomGain.connect(audioCtx.destination);
+    osc2.start(t); osc2.stop(t + 0.25);
 
-    // 4. Rumble tail — shaking debris
+    // Rumble tail
     var rumbleLen = Math.floor(audioCtx.sampleRate * (0.5 + scale * 0.8));
     var rumbleBuf = audioCtx.createBuffer(1, rumbleLen, audioCtx.sampleRate);
     var rumbleData = rumbleBuf.getChannelData(0);
     for (var j = 0; j < rumbleLen; j++) {
-      // Brown noise with envelope
       var last = j > 0 ? rumbleData[j-1] : 0;
       rumbleData[j] = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
     }
     var rumbleSrc = audioCtx.createBufferSource();
     rumbleSrc.buffer = rumbleBuf;
     var bp = audioCtx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.frequency.value = 100 + scale * 80;
-    bp.Q.value = 0.8;
+    bp.type = 'bandpass'; bp.frequency.value = 100 + scale * 80; bp.Q.value = 0.8;
     var rumbleGain = audioCtx.createGain();
     rumbleGain.gain.setValueAtTime(0.4 * scale, t + 0.05);
     rumbleGain.gain.exponentialRampToValueAtTime(0.001, t + 0.5 + scale * 0.5);
-    rumbleSrc.connect(bp);
-    bp.connect(rumbleGain);
-    rumbleGain.connect(audioCtx.destination);
+    rumbleSrc.connect(bp); bp.connect(rumbleGain); rumbleGain.connect(audioCtx.destination);
     rumbleSrc.start(t + 0.05);
 
-    // 5. Glass/debris shimmer (random chance, adds realism)
+    // Glass shimmer
     if (Math.random() > 0.3) {
       var glassLen = Math.floor(audioCtx.sampleRate * 0.4);
       var glassBuf = audioCtx.createBuffer(1, glassLen, audioCtx.sampleRate);
       var glassData = glassBuf.getChannelData(0);
       for (var k = 0; k < glassLen; k++) {
-        // High freq noise with fast decay
         glassData[k] = (Math.random() * 2 - 1) * Math.exp(-k / (glassLen * 0.08));
       }
       var glassSrc = audioCtx.createBufferSource();
       glassSrc.buffer = glassBuf;
       var hpf = audioCtx.createBiquadFilter();
-      hpf.type = 'highpass';
-      hpf.frequency.value = 2000 + Math.random() * 3000;
+      hpf.type = 'highpass'; hpf.frequency.value = 2000 + Math.random() * 3000;
       var glassGain = audioCtx.createGain();
       glassGain.gain.setValueAtTime(0.15 * scale, t);
       glassGain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
-      glassSrc.connect(hpf);
-      hpf.connect(glassGain);
-      glassGain.connect(audioCtx.destination);
+      glassSrc.connect(hpf); hpf.connect(glassGain); glassGain.connect(audioCtx.destination);
       glassSrc.start(t);
     }
 
-    // 6. Echo/reverb — distant feel for large buildings
+    // Echo for big buildings
     if (scale > 0.6) {
       var echoDelay = 0.15 + Math.random() * 0.1;
       var echoOsc = audioCtx.createOscillator();
@@ -228,38 +423,48 @@
       echoGain.gain.setValueAtTime(0.001, t);
       echoGain.gain.linearRampToValueAtTime(0.25 * scale, t + echoDelay);
       echoGain.gain.exponentialRampToValueAtTime(0.001, t + echoDelay + 0.6);
-      echoOsc.connect(echoGain);
-      echoGain.connect(audioCtx.destination);
-      echoOsc.start(t + echoDelay);
-      echoOsc.stop(t + echoDelay + 0.6);
+      echoOsc.connect(echoGain); echoGain.connect(audioCtx.destination);
+      echoOsc.start(t + echoDelay); echoOsc.stop(t + echoDelay + 0.6);
     }
   }
 
+  // Bomb whistle sound
+  function playBombWhistle() {
+    if (!audioCtx) return;
+    var t = audioCtx.currentTime;
+    var osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1200, t);
+    osc.frequency.exponentialRampToValueAtTime(400, t + 0.8);
+    var gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0.08, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(t); osc.stop(t + 0.8);
+  }
+
+  // Combo tone
   function playCombo(level) {
     if (!audioCtx) return;
-    // Quick ascending tone for combo feedback
+    var t = audioCtx.currentTime;
     var osc = audioCtx.createOscillator();
     var gain = audioCtx.createGain();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(400 + level * 120, audioCtx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(800 + level * 200, audioCtx.currentTime + 0.1);
-    gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.15);
+    osc.frequency.setValueAtTime(400 + level * 120, t);
+    osc.frequency.exponentialRampToValueAtTime(800 + level * 200, t + 0.1);
+    gain.gain.setValueAtTime(0.12, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(t); osc.stop(t + 0.15);
   }
 
-  // Procedural fire crackle loop
-  var fireGainNode = null;
-  function startFireSound() {
-    if (!audioCtx || fireGainNode) return;
-    fireGainNode = audioCtx.createGain();
-    fireGainNode.gain.value = 0;
-    fireGainNode.connect(audioCtx.destination);
-
-    // Brown noise for rumble
+  // Engine drone for bombing run
+  var engineGainNode = null;
+  function startEngineSound() {
+    if (!audioCtx || engineGainNode) return;
+    engineGainNode = audioCtx.createGain();
+    engineGainNode.gain.value = 0;
+    engineGainNode.connect(audioCtx.destination);
     var bufSize = audioCtx.sampleRate * 2;
     var buf = audioCtx.createBuffer(2, bufSize, audioCtx.sampleRate);
     for (var ch = 0; ch < 2; ch++) {
@@ -268,35 +473,25 @@
       for (var i = 0; i < bufSize; i++) {
         var white = Math.random() * 2 - 1;
         last = (last + 0.02 * white) / 1.02;
-        data[i] = last * 3.5;
+        data[i] = last * 2;
       }
     }
     var src = audioCtx.createBufferSource();
-    src.buffer = buf;
-    src.loop = true;
-
-    // Bandpass for crackle character
-    var bp = audioCtx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.frequency.value = 800;
-    bp.Q.value = 0.5;
-
-    src.connect(bp);
-    bp.connect(fireGainNode);
+    src.buffer = buf; src.loop = true;
+    var lpf = audioCtx.createBiquadFilter();
+    lpf.type = 'lowpass'; lpf.frequency.value = 200; lpf.Q.value = 2;
+    src.connect(lpf); lpf.connect(engineGainNode);
     src.start();
-
-    // Fade in
-    fireGainNode.gain.linearRampToValueAtTime(0.08, audioCtx.currentTime + 1);
+    engineGainNode.gain.linearRampToValueAtTime(0.12, audioCtx.currentTime + 1);
   }
-
-  function stopFireSound() {
-    if (!fireGainNode || !audioCtx) return;
-    fireGainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 1);
-    setTimeout(function() { fireGainNode = null; }, 1500);
+  function stopEngineSound() {
+    if (!engineGainNode || !audioCtx) return;
+    engineGainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
+    setTimeout(function() { engineGainNode = null; }, 800);
   }
 
   // ============================================================
-  // PARTICLE SYSTEM — debris and explosions
+  // PARTICLE SYSTEM
   // ============================================================
   var particleCanvas = document.getElementById('particles');
   var pctx = particleCanvas.getContext('2d');
@@ -310,80 +505,52 @@
   window.addEventListener('resize', resizeParticleCanvas);
 
   function spawnExplosion(screenX, screenY, buildingColor, intensity) {
-    // Structural chunks — large pieces of the building falling apart
     var chunkCount = 8 + Math.floor(intensity / 15);
     for (var i = 0; i < chunkCount; i++) {
       var angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.2;
       var speed = 3 + Math.random() * 5 * (1 + intensity / 150);
-      var w = 6 + Math.random() * 14;
-      var h = 4 + Math.random() * (intensity / 8);
       particles.push({
         x: screenX + (Math.random() - 0.5) * 20,
         y: screenY + (Math.random() - 0.5) * 10,
         vx: Math.cos(angle) * speed * (Math.random() > 0.5 ? 1 : -1),
         vy: Math.sin(angle) * speed - Math.random() * 2,
-        w: w,
-        h: h,
+        w: 6 + Math.random() * 14,
+        h: 4 + Math.random() * (intensity / 8),
         color: buildingColor || '#b0a89c',
-        life: 1,
-        decay: 0.006 + Math.random() * 0.008,
-        gravity: 0.35,
-        rotation: Math.random() * 360,
-        rotSpeed: (Math.random() - 0.5) * 15,
-        type: 'chunk',
-        bounce: 0.3 + Math.random() * 0.2,
+        life: 1, decay: 0.006 + Math.random() * 0.008, gravity: 0.35,
+        rotation: Math.random() * 360, rotSpeed: (Math.random() - 0.5) * 15,
+        type: 'chunk', bounce: 0.3 + Math.random() * 0.2,
       });
     }
-    // Small debris — bits and pieces
     var debrisCount = 15 + Math.floor(intensity * 0.2);
     for (var j = 0; j < debrisCount; j++) {
       var a2 = Math.random() * Math.PI * 2;
       var sp2 = 1 + Math.random() * 7;
       particles.push({
-        x: screenX + (Math.random() - 0.5) * 30,
-        y: screenY,
-        vx: Math.cos(a2) * sp2,
-        vy: Math.sin(a2) * sp2 - Math.random() * 4,
-        size: 1.5 + Math.random() * 3,
-        color: buildingColor || '#b0a89c',
-        life: 1,
-        decay: 0.012 + Math.random() * 0.015,
-        gravity: 0.25,
-        rotation: Math.random() * 360,
-        rotSpeed: (Math.random() - 0.5) * 12,
-        type: 'debris',
-        bounce: 0.2,
+        x: screenX + (Math.random() - 0.5) * 30, y: screenY,
+        vx: Math.cos(a2) * sp2, vy: Math.sin(a2) * sp2 - Math.random() * 4,
+        size: 1.5 + Math.random() * 3, color: buildingColor || '#b0a89c',
+        life: 1, decay: 0.012 + Math.random() * 0.015, gravity: 0.25,
+        rotation: Math.random() * 360, rotSpeed: (Math.random() - 0.5) * 12,
+        type: 'debris', bounce: 0.2,
       });
     }
-    // Dust cloud — expands and fades
     for (var k = 0; k < 12; k++) {
       particles.push({
-        x: screenX + (Math.random() - 0.5) * 30,
-        y: screenY + (Math.random() - 0.5) * 15,
-        vx: (Math.random() - 0.5) * 4,
-        vy: -1 - Math.random() * 3,
-        size: 15 + Math.random() * 25,
-        color: 'rgba(160,150,140,',
-        life: 1,
-        decay: 0.01 + Math.random() * 0.008,
-        gravity: -0.03,
-        type: 'dust',
+        x: screenX + (Math.random() - 0.5) * 30, y: screenY + (Math.random() - 0.5) * 15,
+        vx: (Math.random() - 0.5) * 4, vy: -1 - Math.random() * 3,
+        size: 15 + Math.random() * 25, color: 'rgba(160,150,140,',
+        life: 1, decay: 0.01 + Math.random() * 0.008, gravity: -0.03, type: 'dust',
       });
     }
-    // Embers / sparks
     for (var m = 0; m < 8; m++) {
       var a3 = -Math.PI / 2 + (Math.random() - 0.5) * 1;
       particles.push({
-        x: screenX + (Math.random() - 0.5) * 15,
-        y: screenY,
-        vx: Math.cos(a3) * (2 + Math.random() * 3),
-        vy: -3 - Math.random() * 5,
+        x: screenX + (Math.random() - 0.5) * 15, y: screenY,
+        vx: Math.cos(a3) * (2 + Math.random() * 3), vy: -3 - Math.random() * 5,
         size: 1 + Math.random() * 2,
-        color: Math.random() > 0.5 ? '#ff6a00' : '#ffaa00',
-        life: 1,
-        decay: 0.02 + Math.random() * 0.02,
-        gravity: -0.05,
-        type: 'ember',
+        color: ['#ff4400','#ff7700','#ffaa00','#ffcc33'][Math.floor(Math.random()*4)],
+        life: 1, decay: 0.02 + Math.random() * 0.02, gravity: -0.05, type: 'ember',
       });
     }
   }
@@ -394,72 +561,38 @@
     var alive = [];
     for (var i = 0; i < particles.length; i++) {
       var p = particles[i];
-      p.x += p.vx;
-      p.y += p.vy;
-      p.vy += p.gravity;
-      p.vx *= 0.99;
-      p.life -= p.decay;
-      p.rotation += p.rotSpeed;
-
-      // Ground bounce for chunks and debris
-      if (p.type === 'chunk' || p.type === 'debris') {
-        if (p.y > groundY - 10) {
-          p.y = groundY - 10;
-          p.vy *= -p.bounce;
-          p.vx *= 0.8;
-          p.rotSpeed *= 0.7;
-          // Spawn tiny impact dust
-          if (Math.abs(p.vy) > 1) {
-            particles.push({
-              x: p.x,
-              y: groundY - 5,
-              vx: (Math.random() - 0.5) * 2,
-              vy: -Math.random() * 1.5,
-              size: 5 + Math.random() * 8,
-              color: 'rgba(140,130,120,',
-              life: 0.6,
-              decay: 0.03,
-              gravity: 0.02,
-              type: 'dust',
-            });
-          }
+      p.x += p.vx; p.y += p.vy; p.vy += p.gravity; p.vx *= 0.99;
+      p.life -= p.decay; p.rotation += p.rotSpeed || 0;
+      if ((p.type === 'chunk' || p.type === 'debris') && p.y > groundY - 10) {
+        p.y = groundY - 10; p.vy *= -(p.bounce || 0.2); p.vx *= 0.8;
+        if (p.rotSpeed) p.rotSpeed *= 0.7;
+        if (Math.abs(p.vy) > 1) {
+          particles.push({
+            x: p.x, y: groundY - 5, vx: (Math.random() - 0.5) * 2, vy: -Math.random() * 1.5,
+            size: 5 + Math.random() * 8, color: 'rgba(140,130,120,', life: 0.6, decay: 0.03, gravity: 0.02, type: 'dust',
+          });
         }
       }
-
       if (p.life <= 0) continue;
       alive.push(p);
-
       pctx.save();
       pctx.globalAlpha = Math.min(1, p.life * 1.5);
-
       if (p.type === 'dust') {
         pctx.fillStyle = p.color + (p.life * 0.4) + ')';
-        pctx.beginPath();
-        pctx.arc(p.x, p.y, p.size * (2 - p.life), 0, Math.PI * 2);
-        pctx.fill();
+        pctx.beginPath(); pctx.arc(p.x, p.y, p.size * (2 - p.life), 0, Math.PI * 2); pctx.fill();
       } else if (p.type === 'ember') {
-        pctx.fillStyle = p.color;
-        pctx.shadowColor = p.color;
-        pctx.shadowBlur = 6;
-        pctx.beginPath();
-        pctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        pctx.fill();
+        pctx.fillStyle = p.color; pctx.shadowColor = p.color; pctx.shadowBlur = 6;
+        pctx.beginPath(); pctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); pctx.fill();
       } else if (p.type === 'chunk') {
-        pctx.translate(p.x, p.y);
-        pctx.rotate(p.rotation * Math.PI / 180);
-        // Chunk with slight 3D shading
+        pctx.translate(p.x, p.y); pctx.rotate(p.rotation * Math.PI / 180);
         pctx.fillStyle = p.color;
         pctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
-        // Darker edge for depth
         pctx.fillStyle = 'rgba(0,0,0,0.2)';
         pctx.fillRect(-p.w / 2, 0, p.w, p.h / 2);
-        // Light edge
         pctx.fillStyle = 'rgba(255,255,255,0.15)';
         pctx.fillRect(-p.w / 2, -p.h / 2, p.w, 2);
       } else {
-        // debris
-        pctx.translate(p.x, p.y);
-        pctx.rotate(p.rotation * Math.PI / 180);
+        pctx.translate(p.x, p.y); pctx.rotate(p.rotation * Math.PI / 180);
         pctx.fillStyle = p.color;
         pctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
       }
@@ -474,40 +607,39 @@
   // GAME STATE
   // ============================================================
   var score = 0;
-  var destroyed = new Set(); // set of destroyed building IDs
+  var totalDestroyed = 0;
+  var totalRuns = 0;
+  var destroyed = new Set();
   var comboCount = 0;
   var comboTimer = null;
-  var destroyedCount = 0;
+
+  // Bombing run state
+  var bombingMode = false;
+  var planeState = null; // { lng, lat, alt, speed, bearing, bombs }
+  var activeBombs = []; // falling bombs
+  var runStats = { bombs: 0, hits: 0, destroyed: 0, score: 0 };
 
   var scoreEl = document.getElementById('score');
-  var comboEl = document.getElementById('combo');
   var destroyedEl = document.getElementById('destroyed-count');
+  var runsEl = document.getElementById('runs-count');
 
   function addScore(height, screenX, screenY) {
-    // Bigger buildings = more points
     var points = Math.max(10, Math.floor(height / 3));
-
-    // Combo system
     comboCount++;
     clearTimeout(comboTimer);
-    comboTimer = setTimeout(function() { comboCount = 0; comboEl.textContent = ''; }, 1500);
-
+    comboTimer = setTimeout(function() { comboCount = 0; }, 1500);
     if (comboCount > 1) {
       var multiplier = Math.min(comboCount, 5);
       points *= multiplier;
-      comboEl.textContent = '🔥 ' + comboCount + 'x COMBO! (x' + multiplier + ')';
       playCombo(comboCount);
     }
-
     score += points;
-    destroyedCount++;
-
+    totalDestroyed++;
+    runStats.score += points;
     scoreEl.textContent = score.toLocaleString();
-    scoreEl.classList.add('pop');
-    setTimeout(function() { scoreEl.classList.remove('pop'); }, 100);
-    destroyedEl.textContent = destroyedCount;
+    destroyedEl.textContent = totalDestroyed;
+    runsEl.textContent = totalRuns;
 
-    // Floating score text
     var floater = document.createElement('div');
     floater.textContent = '+' + points;
     floater.style.cssText = 'position:fixed;left:' + screenX + 'px;top:' + screenY + 'px;color:#ff6b35;font-size:20px;font-weight:800;pointer-events:none;z-index:10;text-shadow:0 2px 4px rgba(0,0,0,0.8);transition:all 0.8s ease-out;';
@@ -537,17 +669,23 @@
     doubleClickZoom: false,
   });
 
-  // Disable double-click zoom — it conflicts with rapid clicking
-  map.doubleClickZoom.disable();
-
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
 
   map.on('styleimagemissing', function(e) {
     map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array([0,0,0,0]) });
   });
 
-  // Track destroyed buildings in a GeoJSON source for rubble
   var rubbleFeatures = { type: 'FeatureCollection', features: [] };
+
+  function makeBox(cx, cy, size) {
+    var s = size;
+    return {
+      type: 'Polygon',
+      coordinates: [[
+        [cx - s, cy - s], [cx + s, cy - s], [cx + s, cy + s], [cx - s, cy + s], [cx - s, cy - s],
+      ]],
+    };
+  }
 
   function add3DLayers() {
     if (!map.getSource('terrain')) {
@@ -557,14 +695,12 @@
       });
       map.setTerrain({ source: 'terrain', exaggeration: 1.5 });
     }
-
     if (!map.getSource('buildings')) {
       map.addSource('buildings', {
         type: 'vector',
         url: 'https://api.maptiler.com/tiles/v3/tiles.json?key=' + KEY,
       });
     }
-
     if (!map.getLayer('3d-buildings')) {
       map.addLayer({
         id: '3d-buildings',
@@ -595,74 +731,46 @@
         },
       });
     }
-
-    // Rubble layer — flat footprint marker where buildings were destroyed
     if (!map.getSource('rubble')) {
-      map.addSource('rubble', {
-        type: 'geojson',
-        data: rubbleFeatures,
-      });
+      map.addSource('rubble', { type: 'geojson', data: rubbleFeatures });
     }
     if (!map.getLayer('rubble-layer')) {
       map.addLayer({
-        id: 'rubble-layer',
-        type: 'fill',
-        source: 'rubble',
-        paint: {
-          'fill-color': '#333',
-          'fill-opacity': 0.4,
-          'fill-outline-color': '#555',
-        },
+        id: 'rubble-layer', type: 'fill', source: 'rubble',
+        paint: { 'fill-color': '#333', 'fill-opacity': 0.4, 'fill-outline-color': '#555' },
       });
     }
-
-    // Fire — 3D extruded columns that occlude properly
+    // Fire layers
     if (!map.getSource('fires')) {
-      map.addSource('fires', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] },
-      });
+      map.addSource('fires', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     }
-    // Outer fire glow
     if (!map.getLayer('fire-glow')) {
       map.addLayer({
-        id: 'fire-glow',
-        type: 'fill-extrusion',
-        source: 'fires',
+        id: 'fire-glow', type: 'fill-extrusion', source: 'fires',
         paint: {
           'fill-extrusion-color': '#ff3300',
           'fill-extrusion-height': ['get', 'fireHeight'],
-          'fill-extrusion-base': 0,
-          'fill-extrusion-opacity': 0.2,
+          'fill-extrusion-base': 0, 'fill-extrusion-opacity': 0.2,
         },
       });
     }
-    // Fire core — brighter, smaller inner column
     if (!map.getLayer('fire-core')) {
       map.addLayer({
-        id: 'fire-core',
-        type: 'fill-extrusion',
-        source: 'fires',
+        id: 'fire-core', type: 'fill-extrusion', source: 'fires',
         paint: {
           'fill-extrusion-color': '#ffcc00',
           'fill-extrusion-height': ['*', ['get', 'fireHeight'], 0.7],
-          'fill-extrusion-base': 0,
-          'fill-extrusion-opacity': 0.5,
+          'fill-extrusion-base': 0, 'fill-extrusion-opacity': 0.5,
         },
       });
     }
-    // Smoke — 3D extruded columns rising from fires
+    // Smoke layer
     if (!map.getSource('smoke')) {
-      map.addSource('smoke', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] },
-      });
+      map.addSource('smoke', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     }
     if (!map.getLayer('smoke-layer')) {
       map.addLayer({
-        id: 'smoke-layer',
-        type: 'fill-extrusion',
-        source: 'smoke',
+        id: 'smoke-layer', type: 'fill-extrusion', source: 'smoke',
         paint: {
           'fill-extrusion-color': ['get', 'smokeColor'],
           'fill-extrusion-height': ['get', 'smokeHeight'],
@@ -671,53 +779,60 @@
         },
       });
     }
-  }
-
-  // Helper: create a small GeoJSON polygon (box) around a point
-  function makeBox(cx, cy, size) {
-    var s = size;
-    return {
-      type: 'Polygon',
-      coordinates: [[
-        [cx - s, cy - s],
-        [cx + s, cy - s],
-        [cx + s, cy + s],
-        [cx - s, cy + s],
-        [cx - s, cy - s],
-      ]],
-    };
+    // Active bombs layer
+    if (!map.getSource('bombs')) {
+      map.addSource('bombs', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    }
+    if (!map.getLayer('bomb-layer')) {
+      map.addLayer({
+        id: 'bomb-layer', type: 'fill-extrusion', source: 'bombs',
+        paint: {
+          'fill-extrusion-color': '#222',
+          'fill-extrusion-height': 3,
+          'fill-extrusion-base': 0,
+          'fill-extrusion-opacity': 0.9,
+        },
+      });
+    }
+    // Bomb trail layer
+    if (!map.getSource('bomb-trails')) {
+      map.addSource('bomb-trails', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    }
+    if (!map.getLayer('bomb-trail-layer')) {
+      map.addLayer({
+        id: 'bomb-trail-layer', type: 'line', source: 'bomb-trails',
+        paint: { 'line-color': '#888', 'line-width': 1, 'line-opacity': 0.3 },
+      });
+    }
   }
 
   // Terrain zoom adjustment
   map.on('zoom', function() {
     var z = map.getZoom();
     var exag = z > 15 ? Math.max(0.3, 1.5 - (z - 15) * 0.25) : 1.5;
-    if (map.getSource('terrain')) {
-      map.setTerrain({ source: 'terrain', exaggeration: exag });
-    }
+    if (map.getSource('terrain')) map.setTerrain({ source: 'terrain', exaggeration: exag });
   });
 
   map.on('load', add3DLayers);
 
-  // Animate fire — flickering 3D columns + rising smoke
+  // ============================================================
+  // FIRE / SMOKE ANIMATION
+  // ============================================================
   var fireTime = 0;
   var smokeColumns = [];
-  var fireLocations = []; // track [lng, lat, baseHeight, boxSize] for each fire
+  var fireLocations = [];
 
   function spawnSmokePuff(fire) {
     var s = fire.boxSize * (0.6 + Math.random() * 0.8);
     smokeColumns.push({
       cx: fire.lng + (Math.random() - 0.5) * s * 3,
       cy: fire.lat + (Math.random() - 0.5) * s * 3,
-      baseHeight: 0,
-      topHeight: 2 + Math.random() * 5,
+      baseHeight: 0, topHeight: 2 + Math.random() * 5,
       rise: 0.15 + Math.random() * 0.25,
       drift: (Math.random() - 0.5) * 0.0000002,
-      size: s,
-      growRate: 0.00000015 + Math.random() * 0.0000002,
+      size: s, growRate: 0.00000015 + Math.random() * 0.0000002,
       opacity: 0.25 + Math.random() * 0.15,
-      life: 1,
-      decay: 0.002 + Math.random() * 0.003,
+      life: 1, decay: 0.002 + Math.random() * 0.003,
     });
   }
 
@@ -726,45 +841,31 @@
     var fireSrc = map.getSource('fires');
     fireTime += 1;
 
-    // Rebuild fire GeoJSON with animated heights
     if (fireSrc && fireLocations.length > 0) {
       var fireFeatures = [];
       for (var f = 0; f < fireLocations.length; f++) {
         var fl = fireLocations[f];
-        // Flickering height — multiple sine waves for organic feel
         var h = fl.baseH
           + Math.sin(fireTime * 0.06 + f * 2.1) * (fl.baseH * 0.25)
           + Math.sin(fireTime * 0.15 + f * 0.7) * (fl.baseH * 0.12)
           + Math.random() * (fl.baseH * 0.08);
         h = Math.max(3, h);
-
         fireFeatures.push({
           type: 'Feature',
           properties: { fireHeight: h },
           geometry: makeBox(fl.lng, fl.lat, fl.boxSize),
         });
-
-        // Spawn smoke puffs
-        if (Math.random() > 0.4 && smokeColumns.length < 120) {
-          spawnSmokePuff(fl);
-        }
-
-        // Spawn canvas embers at screen position
+        if (Math.random() > 0.4 && smokeColumns.length < 120) spawnSmokePuff(fl);
         if (Math.random() > 0.6 && isFinite(fl.lng) && isFinite(fl.lat)) {
           var sp = map.project(new maplibregl.LngLat(fl.lng, fl.lat));
           if (sp) {
             particles.push({
-              x: sp.x + (Math.random() - 0.5) * 30,
-              y: sp.y - Math.random() * 40,
-              vx: (Math.random() - 0.5) * 2.5,
-              vy: -1.5 - Math.random() * 4,
+              x: sp.x + (Math.random() - 0.5) * 30, y: sp.y - Math.random() * 40,
+              vx: (Math.random() - 0.5) * 2.5, vy: -1.5 - Math.random() * 4,
               size: 1 + Math.random() * 2.5,
               color: ['#ff4400','#ff7700','#ffaa00','#ffcc33'][Math.floor(Math.random()*4)],
-              life: 1,
-              decay: 0.02 + Math.random() * 0.025,
-              gravity: -0.04,
-              rotation: 0, rotSpeed: 0,
-              type: 'ember',
+              life: 1, decay: 0.02 + Math.random() * 0.025, gravity: -0.04,
+              rotation: 0, rotSpeed: 0, type: 'ember',
             });
           }
         }
@@ -772,34 +873,25 @@
       fireSrc.setData({ type: 'FeatureCollection', features: fireFeatures });
     }
 
-    // Update smoke columns
     if (smokeSrc) {
       var alive = [];
       for (var i = 0; i < smokeColumns.length; i++) {
         var p = smokeColumns[i];
-        p.topHeight += p.rise;
-        p.baseHeight += p.rise * 0.5; // hollow column — base rises slower
-        p.cx += p.drift;
-        p.size += p.growRate;
-        p.life -= p.decay;
+        p.topHeight += p.rise; p.baseHeight += p.rise * 0.5;
+        p.cx += p.drift; p.size += p.growRate; p.life -= p.decay;
         if (p.life <= 0 || p.baseHeight > 120) continue;
         if (!isFinite(p.cx) || !isFinite(p.cy) || p.size <= 0) continue;
         alive.push(p);
       }
       smokeColumns = alive;
       if (smokeColumns.length > 120) smokeColumns = smokeColumns.slice(-120);
-
       var smokeFeatures = [];
       for (var j = 0; j < smokeColumns.length; j++) {
         var sc = smokeColumns[j];
         var g = Math.floor(25 + (1 - sc.life) * 50);
         smokeFeatures.push({
           type: 'Feature',
-          properties: {
-            smokeColor: 'rgb(' + g + ',' + g + ',' + g + ')',
-            smokeHeight: sc.topHeight,
-            smokeBase: sc.baseHeight,
-          },
+          properties: { smokeColor: 'rgb(' + g + ',' + g + ',' + g + ')', smokeHeight: sc.topHeight, smokeBase: sc.baseHeight },
           geometry: makeBox(sc.cx, sc.cy, sc.size),
         });
       }
@@ -808,121 +900,353 @@
   }
 
   function animateFire() {
-    try {
-      updateFireSystem();
-    } catch(e) {
-      console.warn('Fire animation error:', e);
-    }
+    try { updateFireSystem(); } catch(e) { console.warn('Fire error:', e); }
     requestAnimationFrame(animateFire);
   }
-  // Start animation after map loads
-  map.on('load', function() {
-    setTimeout(animateFire, 500);
-  });
+  map.on('load', function() { setTimeout(animateFire, 500); });
 
   // ============================================================
-  // BUILDING DESTRUCTION
+  // BOMBING RUN
   // ============================================================
-  map.on('click', function(e) {
+  var MAX_BOMBS = 12;
+
+  function startBombingRun() {
     initAudio();
+    bombingMode = true;
+    var center = map.getCenter();
+    var bearing = map.getBearing() || 0;
 
-    // Don't process clicks while layer isn't ready
-    if (!map.getLayer('3d-buildings')) return;
+    planeState = {
+      lng: center.lng,
+      lat: center.lat,
+      alt: 800, // meters
+      speed: 0.0003, // degrees per frame (~100m/s)
+      bearing: bearing,
+      bombs: MAX_BOMBS,
+      steer: 0,
+    };
+    activeBombs = [];
+    runStats = { bombs: 0, hits: 0, destroyed: 0, score: 0 };
+    totalRuns++;
 
-    var features = map.queryRenderedFeatures(e.point, {
-      layers: ['3d-buildings'],
+    // UI
+    document.getElementById('takeoff-btn').classList.add('hidden');
+    document.getElementById('crosshair').classList.add('active');
+    document.getElementById('bombs-hud').classList.add('active');
+    document.getElementById('flight-bar').classList.add('active');
+    document.getElementById('mode-indicator').className = 'bombing';
+    document.getElementById('mode-indicator').textContent = '💣 BOMBING RUN';
+    document.body.style.cursor = 'none';
+
+    // Disable map drag/zoom during bombing
+    map.dragPan.disable();
+    map.scrollZoom.disable();
+    map.boxZoom.disable();
+    map.keyboard.disable();
+
+    // Build bomb icons
+    var bh = document.getElementById('bombs-hud');
+    bh.innerHTML = '';
+    for (var i = 0; i < MAX_BOMBS; i++) {
+      var d = document.createElement('div');
+      d.className = 'bomb-icon';
+      d.id = 'bomb-' + i;
+      bh.appendChild(d);
+    }
+
+    startEngineSound();
+    updateBombingRun();
+  }
+
+  function updateBombingRun() {
+    if (!bombingMode || !planeState) return;
+
+    // Steer
+    planeState.bearing += planeState.steer * 0.3;
+    planeState.steer *= 0.95; // dampen
+
+    // Move plane forward
+    var br = planeState.bearing * Math.PI / 180;
+    planeState.lng += Math.sin(br) * planeState.speed;
+    planeState.lat += Math.cos(br) * planeState.speed;
+
+    // Update camera — follow plane from behind and above
+    var camDist = 0.004; // distance behind plane
+    var camLng = planeState.lng - Math.sin(br) * camDist;
+    var camLat = planeState.lat - Math.cos(br) * camDist;
+
+    map.easeTo({
+      center: [camLng, camLat],
+      bearing: planeState.bearing,
+      pitch: 60,
+      zoom: 15.5,
+      duration: 0,
+      easing: function(t) { return t; },
     });
 
-    if (features.length === 0) return;
+    // Update HUD
+    var speedKmh = Math.round(planeState.speed * 111000 * 3.6);
+    document.getElementById('fi-speed').textContent = speedKmh;
+    document.getElementById('fi-alt').textContent = Math.round(planeState.alt) + 'm';
+    document.getElementById('fi-bearing').textContent = Math.round(((planeState.bearing % 360) + 360) % 360) + '°';
 
-    var building = features[0];
-    var props = building.properties || {};
-    var height = props.render_height || 30;
-    var geom = building.geometry;
-    var id = building.id;
+    // Update falling bombs
+    updateActiveBombs();
 
-    // Don't destroy the same building twice
-    if (destroyed.has(id)) return;
-    destroyed.add(id);
+    requestAnimationFrame(updateBombingRun);
+  }
 
-    // Get building color for particles
-    var color = props.colour;
-    if (!color || ['white','beige','black','red','brown','green','darkgray','lightgray'].indexOf(color) !== -1) {
-      var colorMap = { white:'#f0ece8', beige:'#e8dcc8', red:'#b55a5a', brown:'#8b6f5e', green:'#7a9a6d', black:'#3a3a3a', darkgray:'#6b6b6b', lightgray:'#d0d0d0' };
-      color = colorMap[color] || '#b0a89c';
+  function dropBomb() {
+    if (!bombingMode || !planeState || planeState.bombs <= 0) return;
+
+    planeState.bombs--;
+    runStats.bombs++;
+    var idx = MAX_BOMBS - planeState.bombs - 1;
+    var bombEl = document.getElementById('bomb-' + idx);
+    if (bombEl) bombEl.classList.add('used');
+
+    // Bomb starts at plane position, falls with gravity
+    activeBombs.push({
+      lng: planeState.lng,
+      lat: planeState.lat,
+      alt: planeState.alt,
+      vx: Math.sin(planeState.bearing * Math.PI / 180) * planeState.speed * 0.5, // forward momentum
+      vy: Math.cos(planeState.bearing * Math.PI / 180) * planeState.speed * 0.5,
+      vAlt: 0, // starts at 0, gravity pulls it down
+      trail: [[planeState.lng, planeState.lat]],
+    });
+
+    playBombWhistle();
+
+    if (planeState.bombs <= 0) {
+      setTimeout(endBombingRun, 2000);
     }
+  }
 
-    // Spawn explosion at click point
-    spawnExplosion(e.originalEvent.clientX, e.originalEvent.clientY, color, height);
+  function updateActiveBombs() {
+    var bombSrc = map.getSource('bombs');
+    var trailSrc = map.getSource('bomb-trails');
+    if (!bombSrc) return;
 
-    // Screen shake
-    document.getElementById('map').classList.add('screen-shake');
-    setTimeout(function() { document.getElementById('map').classList.remove('screen-shake'); }, 300);
+    var alive = [];
+    var bombFeatures = [];
+    var trailFeatures = [];
 
-    // Flash
-    var flash = document.createElement('div');
-    flash.className = 'flash';
-    document.body.appendChild(flash);
-    setTimeout(function() { flash.remove(); }, 200);
+    for (var i = 0; i < activeBombs.length; i++) {
+      var b = activeBombs[i];
 
-    // Sound — procedural explosion scaled to building size
-    generateExplosion(height);
+      // Physics: gravity pulls bomb down
+      b.vAlt -= 0.8; // gravity acceleration
+      b.alt += b.vAlt;
+      b.lng += b.vx;
+      b.lat += b.vy;
+      b.trail.push([b.lng, b.lat]);
 
-    // Add rubble — dark building shell where the real one was
-    if (geom && geom.type === 'Polygon') {
-      rubbleFeatures.features.push({
+      if (b.alt <= 0) {
+        // Impact!
+        bombImpact(b.lng, b.lat);
+        continue;
+      }
+
+      alive.push(b);
+      bombFeatures.push({
         type: 'Feature',
-        properties: { height: props.render_height || 30 },
-        geometry: geom,
+        properties: {},
+        geometry: makeBox(b.lng, b.lat, 0.000003),
       });
-      if (map.getSource('rubble')) {
-        map.getSource('rubble').setData(rubbleFeatures);
+
+      // Trail
+      if (b.trail.length > 1) {
+        trailFeatures.push({
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'LineString', coordinates: b.trail.slice(-20) },
+        });
       }
     }
 
-    // Add fire at building center — 3D extruded box
-    if (geom && geom.coordinates && geom.coordinates[0]) {
-      var coords = geom.coordinates[0];
-      var cx = 0, cy = 0;
-      var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-      for (var i = 0; i < coords.length; i++) {
-        cx += coords[i][0]; cy += coords[i][1];
-        if (coords[i][0] < minX) minX = coords[i][0];
-        if (coords[i][0] > maxX) maxX = coords[i][0];
-        if (coords[i][1] < minY) minY = coords[i][1];
-        if (coords[i][1] > maxY) maxY = coords[i][1];
-      }
-      cx /= coords.length;
-      cy /= coords.length;
-      var boxSize = Math.max(0.000005, Math.max(maxX - minX, maxY - minY) * 0.35);
+    activeBombs = alive;
+    bombSrc.setData({ type: 'FeatureCollection', features: bombFeatures });
+    if (trailSrc) trailSrc.setData({ type: 'FeatureCollection', features: trailFeatures });
+  }
 
-      fireLocations.push({
-        lng: cx,
-        lat: cy,
-        baseH: Math.max(8, height * 0.35),
-        boxSize: boxSize,
-      });
+  function bombImpact(lng, lat) {
+    // Check what buildings are near the impact point
+    var screenPos = map.project(new maplibregl.LngLat(lng, lat));
+    if (!screenPos) return;
+
+    var features = map.queryRenderedFeatures(screenPos, {
+      layers: ['3d-buildings'],
+      radius: 40, // pixel radius for splash damage
+    });
+
+    var hitSomething = false;
+    for (var i = 0; i < features.length; i++) {
+      var building = features[i];
+      var id = building.id;
+      if (destroyed.has(id)) continue;
+
+      var props = building.properties || {};
+      var height = props.render_height || 30;
+      var geom = building.geometry;
+
+      destroyed.add(id);
+      hitSomething = true;
+      runStats.destroyed++;
+      runStats.hits++;
+
+      // Building color for particles
+      var color = props.colour;
+      var colorMap = { white:'#f0ece8', beige:'#e8dcc8', red:'#b55a5a', brown:'#8b6f5e', green:'#7a9a6d', black:'#3a3a3a', darkgray:'#6b6b6b', lightgray:'#d0d0d0' };
+      var pColor = colorMap[color] || (color && color[0] === '#' ? color : '#b0a89c');
+
+      // Explosion at building screen position
+      var bScreen = map.project(new maplibregl.LngLat(lng, lat));
+      if (bScreen) {
+        spawnExplosion(bScreen.x, bScreen.y, pColor, height);
+      }
+
+      // Screen shake
+      document.getElementById('map').classList.add('screen-shake');
+      setTimeout(function() { document.getElementById('map').classList.remove('screen-shake'); }, 300);
+
+      // Flash
+      var flash = document.createElement('div');
+      flash.className = 'flash';
+      document.body.appendChild(flash);
+      setTimeout(function() { flash.remove(); }, 200);
+
+      generateExplosion(height);
+      addScore(height, screenPos.x, screenPos.y);
+
+      // Rubble
+      if (geom && geom.type === 'Polygon') {
+        rubbleFeatures.features.push({ type: 'Feature', properties: {}, geometry: geom });
+        if (map.getSource('rubble')) map.getSource('rubble').setData(rubbleFeatures);
+      }
+
+      // Fire
+      if (geom && geom.coordinates && geom.coordinates[0]) {
+        var coords = geom.coordinates[0];
+        var cx = 0, cy = 0;
+        var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (var c = 0; c < coords.length; c++) {
+          cx += coords[c][0]; cy += coords[c][1];
+          if (coords[c][0] < minX) minX = coords[c][0];
+          if (coords[c][0] > maxX) maxX = coords[c][0];
+          if (coords[c][1] < minY) minY = coords[c][1];
+          if (coords[c][1] > maxY) maxY = coords[c][1];
+        }
+        cx /= coords.length; cy /= coords.length;
+        var boxSize = Math.max(0.000005, Math.max(maxX - minX, maxY - minY) * 0.35);
+        fireLocations.push({ lng: cx, lat: cy, baseH: Math.max(8, height * 0.35), boxSize: boxSize });
+      }
     }
 
-    // Score
-    addScore(height, e.originalEvent.clientX, e.originalEvent.clientY);
+    if (!hitSomething) {
+      // Miss — small dust puff
+      if (screenPos) {
+        for (var d = 0; d < 5; d++) {
+          particles.push({
+            x: screenPos.x + (Math.random() - 0.5) * 20, y: screenPos.y,
+            vx: (Math.random() - 0.5) * 3, vy: -Math.random() * 2,
+            size: 8 + Math.random() * 12, color: 'rgba(140,130,120,',
+            life: 0.6, decay: 0.02, gravity: 0.02, type: 'dust',
+          });
+        }
+      }
+      // Small thud for miss
+      if (audioCtx) {
+        var t = audioCtx.currentTime;
+        var o = audioCtx.createOscillator();
+        o.type = 'sine'; o.frequency.setValueAtTime(60, t); o.frequency.exponentialRampToValueAtTime(20, t + 0.15);
+        var g = audioCtx.createGain();
+        g.gain.setValueAtTime(0.3, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+        o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t + 0.2);
+      }
+    }
+  }
 
-    // Start ambient fire sound on first destruction
-    if (destroyedCount === 0) startFireSound();
+  function endBombingRun() {
+    if (!bombingMode) return;
+    bombingMode = false;
+    planeState = null;
 
-    // Hide cursor briefly for "impact" feel
-    document.body.style.cursor = 'crosshair';
+    // Re-enable map controls
+    map.dragPan.enable();
+    map.scrollZoom.enable();
+    map.boxZoom.enable();
+    map.keyboard.enable();
+
+    // UI
+    document.getElementById('takeoff-btn').classList.remove('hidden');
+    document.getElementById('crosshair').classList.remove('active');
+    document.getElementById('bombs-hud').classList.remove('active');
+    document.getElementById('flight-bar').classList.remove('active');
+    document.getElementById('mode-indicator').className = 'navigate';
+    document.getElementById('mode-indicator').textContent = '🔍 Navigate';
+    document.body.style.cursor = 'default';
+
+    stopEngineSound();
+
+    // Show summary
+    document.getElementById('rs-score').textContent = runStats.score.toLocaleString();
+    document.getElementById('rs-destroyed').textContent = runStats.destroyed;
+    document.getElementById('rs-bombs').textContent = runStats.bombs;
+    document.getElementById('rs-accuracy').textContent = runStats.bombs > 0
+      ? Math.round((runStats.hits / runStats.bombs) * 100) + '%' : '0%';
+    document.getElementById('run-summary').classList.add('active');
+  }
+
+  function closeSummary() {
+    document.getElementById('run-summary').classList.remove('active');
+  }
+
+  // ============================================================
+  // INPUT HANDLING
+  // ============================================================
+  document.addEventListener('keydown', function(e) {
+    if (!bombingMode || !planeState) return;
+    if (e.key === ' ' || e.key === 'Space') {
+      e.preventDefault();
+      dropBomb();
+    }
+    if (e.key === 'Escape') {
+      endBombingRun();
+    }
+    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+      planeState.steer = -1;
+    }
+    if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+      planeState.steer = 1;
+    }
+    if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+      planeState.alt = Math.min(2000, planeState.alt + 50);
+    }
+    if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+      planeState.alt = Math.max(200, planeState.alt - 50);
+    }
   });
 
-  // ============================================================
-  // CURSOR — show monster emoji on hover over buildings
-  // ============================================================
+  document.addEventListener('keyup', function(e) {
+    if (!bombingMode || !planeState) return;
+    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A' ||
+        e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+      planeState.steer = 0;
+    }
+  });
+
+  map.on('click', function(e) {
+    if (bombingMode) {
+      initAudio();
+      dropBomb();
+    }
+  });
+
+  // Cursor in navigate mode
   map.on('mousemove', function(e) {
-    if (!map.getLayer('3d-buildings')) return;
-    var features = map.queryRenderedFeatures(e.point, {
-      layers: ['3d-buildings'],
-    });
-    document.body.style.cursor = features.length > 0 ? 'pointer' : 'crosshair';
+    if (bombingMode) return;
+    document.body.style.cursor = 'default';
   });
   </script>
 </body>
