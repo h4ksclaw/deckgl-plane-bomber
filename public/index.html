@@ -744,9 +744,11 @@
     if (!map.getSource('fires')) {
       map.addSource('fires', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     }
+    // Fire layers — hide when zoomed out (only show at close range)
     if (!map.getLayer('fire-glow')) {
       map.addLayer({
         id: 'fire-glow', type: 'fill-extrusion', source: 'fires',
+        minzoom: 14.5,
         paint: {
           'fill-extrusion-color': '#ff3300',
           'fill-extrusion-height': ['get', 'fireHeight'],
@@ -757,6 +759,7 @@
     if (!map.getLayer('fire-core')) {
       map.addLayer({
         id: 'fire-core', type: 'fill-extrusion', source: 'fires',
+        minzoom: 14.5,
         paint: {
           'fill-extrusion-color': '#ffcc00',
           'fill-extrusion-height': ['*', ['get', 'fireHeight'], 0.7],
@@ -771,6 +774,7 @@
     if (!map.getLayer('smoke-layer')) {
       map.addLayer({
         id: 'smoke-layer', type: 'fill-extrusion', source: 'smoke',
+        minzoom: 14.5,
         paint: {
           'fill-extrusion-color': ['get', 'smokeColor'],
           'fill-extrusion-height': ['get', 'smokeHeight'],
@@ -787,10 +791,10 @@
       map.addLayer({
         id: 'bomb-layer', type: 'fill-extrusion', source: 'bombs',
         paint: {
-          'fill-extrusion-color': '#222',
-          'fill-extrusion-height': 3,
+          'fill-extrusion-color': '#111',
+          'fill-extrusion-height': 8,
           'fill-extrusion-base': 0,
-          'fill-extrusion-opacity': 0.9,
+          'fill-extrusion-opacity': 1,
         },
       });
     }
@@ -802,6 +806,23 @@
       map.addLayer({
         id: 'bomb-trail-layer', type: 'line', source: 'bomb-trails',
         paint: { 'line-color': '#888', 'line-width': 1, 'line-opacity': 0.3 },
+      });
+    }
+    // Red dot markers for destroyed buildings — visible at all zoom levels
+    if (!map.getSource('fire-markers')) {
+      map.addSource('fire-markers', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    }
+    if (!map.getLayer('fire-marker-layer')) {
+      map.addLayer({
+        id: 'fire-marker-layer', type: 'circle', source: 'fire-markers',
+        maxzoom: 15,
+        paint: {
+          'circle-radius': 6,
+          'circle-color': '#ff3300',
+          'circle-opacity': 0.8,
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#aa0000',
+        },
       });
     }
   }
@@ -908,7 +929,7 @@
   // ============================================================
   // BOMBING RUN
   // ============================================================
-  var MAX_BOMBS = 12;
+  var MAX_BOMBS = 8;
 
   function startBombingRun() {
     initAudio();
@@ -920,7 +941,7 @@
       lng: center.lng,
       lat: center.lat,
       alt: 800, // meters
-      speed: 0.0003, // degrees per frame (~100m/s)
+      speed: 0.0002, // degrees per frame (~67m/s)
       bearing: bearing,
       bombs: MAX_BOMBS,
       steer: 0,
@@ -1052,7 +1073,7 @@
       bombFeatures.push({
         type: 'Feature',
         properties: {},
-        geometry: makeBox(b.lng, b.lat, 0.000003),
+        geometry: makeBox(b.lng, b.lat, 0.000008),
       });
 
       // Trail
@@ -1138,8 +1159,19 @@
           if (coords[c][1] > maxY) maxY = coords[c][1];
         }
         cx /= coords.length; cy /= coords.length;
-        var boxSize = Math.max(0.000005, Math.max(maxX - minX, maxY - minY) * 0.35);
-        fireLocations.push({ lng: cx, lat: cy, baseH: Math.max(8, height * 0.35), boxSize: boxSize });
+        var boxSize = Math.max(0.000005, Math.max(maxX - minX, maxY - minY) * 0.25);
+        fireLocations.push({ lng: cx, lat: cy, baseH: Math.max(8, height * 0.25), boxSize: boxSize });
+        // Update red dot markers
+        var markerSrc = map.getSource('fire-markers');
+        if (markerSrc) {
+          var md = markerSrc._data;
+          md.features.push({
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'Point', coordinates: [cx, cy] },
+          });
+          markerSrc.setData(md);
+        }
       }
     }
 
