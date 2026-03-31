@@ -108,80 +108,130 @@
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script>
   // ============================================================
-  // AUDIO ENGINE — real CC0 impact sounds from Kenney
+  // AUDIO ENGINE — procedural explosion sounds
   // ============================================================
   var audioCtx = null;
-  var soundBuffers = {};
 
   function initAudio() {
     if (!audioCtx) {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      preloadSounds();
     }
   }
 
-  function preloadSounds() {
-    // Sound categories by building size
-    var soundFiles = {
-      light:  ['sounds/impactGeneric_light_000.ogg', 'sounds/impactGeneric_light_001.ogg', 'sounds/impactGeneric_light_002.ogg', 'sounds/impactGeneric_light_003.ogg', 'sounds/impactGeneric_light_004.ogg'],
-      medium: ['sounds/impactWood_medium_000.ogg', 'sounds/impactWood_medium_001.ogg', 'sounds/impactWood_medium_002.ogg', 'sounds/impactWood_medium_003.ogg', 'sounds/impactWood_medium_004.ogg'],
-      heavy:  ['sounds/impactMetal_heavy_000.ogg', 'sounds/impactMetal_heavy_001.ogg', 'sounds/impactMetal_heavy_002.ogg', 'sounds/impactMetal_heavy_003.ogg', 'sounds/impactMetal_heavy_004.ogg', 'sounds/impactPlate_heavy_000.ogg', 'sounds/impactPlate_heavy_001.ogg', 'sounds/impactPlate_heavy_002.ogg'],
-      massive:['sounds/impactMining_000.ogg', 'sounds/impactMining_001.ogg', 'sounds/impactMining_002.ogg', 'sounds/impactMining_003.ogg', 'sounds/impactMining_004.ogg'],
-      glass:  ['sounds/impactGlass_heavy_000.ogg', 'sounds/impactGlass_heavy_001.ogg', 'sounds/impactGlass_heavy_002.ogg', 'sounds/impactGlass_heavy_003.ogg', 'sounds/impactGlass_heavy_004.ogg'],
-    };
-
-    Object.keys(soundFiles).forEach(function(category) {
-      soundFiles[category].forEach(function(url, i) {
-        fetch(url)
-          .then(function(r) { return r.arrayBuffer(); })
-          .then(function(buf) { return audioCtx.decodeAudioData(buf); })
-          .then(function(decoded) {
-            if (!soundBuffers[category]) soundBuffers[category] = [];
-            soundBuffers[category].push(decoded);
-          })
-          .catch(function() {});
-      });
-    });
-  }
-
-  function playCrash(height) {
+  function generateExplosion(height) {
     if (!audioCtx) return;
-    // Pick category based on building height
-    var category;
-    if (height > 150) category = 'massive';
-    else if (height > 80) category = 'heavy';
-    else if (height > 30) category = 'medium';
-    else category = 'light';
+    var t = audioCtx.currentTime;
+    var scale = Math.min(1, Math.max(0.3, height / 150)); // 0.3 for small, 1.0 for massive
 
-    var sounds = soundBuffers[category] || [];
-    if (sounds.length === 0) return;
+    // 1. Sub-bass thump — deep impact
+    var osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(80 * scale, t);
+    osc.frequency.exponentialRampToValueAtTime(20, t + 0.3);
+    var subGain = audioCtx.createGain();
+    subGain.gain.setValueAtTime(0.8 * scale, t);
+    subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    osc.connect(subGain);
+    subGain.connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + 0.4);
 
-    // Pick a random sound from the category
-    var buf = sounds[Math.floor(Math.random() * sounds.length)];
-    var source = audioCtx.createBufferSource();
-    source.buffer = buf;
+    // 2. Noise burst — the crunch/bang
+    var noiseLen = Math.floor(audioCtx.sampleRate * (0.15 + scale * 0.25));
+    var noiseBuf = audioCtx.createBuffer(1, noiseLen, audioCtx.sampleRate);
+    var noiseData = noiseBuf.getChannelData(0);
+    for (var i = 0; i < noiseLen; i++) {
+      noiseData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (noiseLen * 0.15));
+    }
+    var noiseSrc = audioCtx.createBufferSource();
+    noiseSrc.buffer = noiseBuf;
+    // Lowpass for heavy rumble (lower = heavier)
+    var lpf = audioCtx.createBiquadFilter();
+    lpf.type = 'lowpass';
+    lpf.frequency.setValueAtTime(800 + scale * 1200, t);
+    lpf.frequency.exponentialRampToValueAtTime(200, t + 0.3);
+    var noiseGain = audioCtx.createGain();
+    noiseGain.gain.setValueAtTime(0.7 * scale, t);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 0.2 + scale * 0.2);
+    noiseSrc.connect(lpf);
+    lpf.connect(noiseGain);
+    noiseGain.connect(audioCtx.destination);
+    noiseSrc.start(t);
 
-    // Slight pitch variation for variety
-    source.playbackRate.value = 0.9 + Math.random() * 0.2;
+    // 3. Mid-range boom
+    var osc2 = audioCtx.createOscillator();
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(150, t);
+    osc2.frequency.exponentialRampToValueAtTime(40, t + 0.2);
+    var boomGain = audioCtx.createGain();
+    boomGain.gain.setValueAtTime(0.5 * scale, t);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+    osc2.connect(boomGain);
+    boomGain.connect(audioCtx.destination);
+    osc2.start(t);
+    osc2.stop(t + 0.25);
 
-    var gain = audioCtx.createGain();
-    gain.gain.setValueAtTime(0.8, audioCtx.currentTime);
+    // 4. Rumble tail — shaking debris
+    var rumbleLen = Math.floor(audioCtx.sampleRate * (0.5 + scale * 0.8));
+    var rumbleBuf = audioCtx.createBuffer(1, rumbleLen, audioCtx.sampleRate);
+    var rumbleData = rumbleBuf.getChannelData(0);
+    for (var j = 0; j < rumbleLen; j++) {
+      // Brown noise with envelope
+      var last = j > 0 ? rumbleData[j-1] : 0;
+      rumbleData[j] = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+    }
+    var rumbleSrc = audioCtx.createBufferSource();
+    rumbleSrc.buffer = rumbleBuf;
+    var bp = audioCtx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 100 + scale * 80;
+    bp.Q.value = 0.8;
+    var rumbleGain = audioCtx.createGain();
+    rumbleGain.gain.setValueAtTime(0.4 * scale, t + 0.05);
+    rumbleGain.gain.exponentialRampToValueAtTime(0.001, t + 0.5 + scale * 0.5);
+    rumbleSrc.connect(bp);
+    bp.connect(rumbleGain);
+    rumbleGain.connect(audioCtx.destination);
+    rumbleSrc.start(t + 0.05);
 
-    source.connect(gain);
-    gain.connect(audioCtx.destination);
-    source.start();
-
-    // Layer a glass sound randomly for extra crunch
-    if (Math.random() > 0.5 && soundBuffers.glass && soundBuffers.glass.length > 0) {
-      var glassBuf = soundBuffers.glass[Math.floor(Math.random() * soundBuffers.glass.length)];
-      var glassSource = audioCtx.createBufferSource();
-      glassSource.buffer = glassBuf;
-      glassSource.playbackRate.value = 0.8 + Math.random() * 0.4;
+    // 5. Glass/debris shimmer (random chance, adds realism)
+    if (Math.random() > 0.3) {
+      var glassLen = Math.floor(audioCtx.sampleRate * 0.4);
+      var glassBuf = audioCtx.createBuffer(1, glassLen, audioCtx.sampleRate);
+      var glassData = glassBuf.getChannelData(0);
+      for (var k = 0; k < glassLen; k++) {
+        // High freq noise with fast decay
+        glassData[k] = (Math.random() * 2 - 1) * Math.exp(-k / (glassLen * 0.08));
+      }
+      var glassSrc = audioCtx.createBufferSource();
+      glassSrc.buffer = glassBuf;
+      var hpf = audioCtx.createBiquadFilter();
+      hpf.type = 'highpass';
+      hpf.frequency.value = 2000 + Math.random() * 3000;
       var glassGain = audioCtx.createGain();
-      glassGain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-      glassSource.connect(glassGain);
+      glassGain.gain.setValueAtTime(0.15 * scale, t);
+      glassGain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+      glassSrc.connect(hpf);
+      hpf.connect(glassGain);
       glassGain.connect(audioCtx.destination);
-      glassSource.start();
+      glassSrc.start(t);
+    }
+
+    // 6. Echo/reverb — distant feel for large buildings
+    if (scale > 0.6) {
+      var echoDelay = 0.15 + Math.random() * 0.1;
+      var echoOsc = audioCtx.createOscillator();
+      echoOsc.type = 'sine';
+      echoOsc.frequency.setValueAtTime(50, t + echoDelay);
+      echoOsc.frequency.exponentialRampToValueAtTime(20, t + echoDelay + 0.5);
+      var echoGain = audioCtx.createGain();
+      echoGain.gain.setValueAtTime(0.001, t);
+      echoGain.gain.linearRampToValueAtTime(0.25 * scale, t + echoDelay);
+      echoGain.gain.exponentialRampToValueAtTime(0.001, t + echoDelay + 0.6);
+      echoOsc.connect(echoGain);
+      echoGain.connect(audioCtx.destination);
+      echoOsc.start(t + echoDelay);
+      echoOsc.stop(t + echoDelay + 0.6);
     }
   }
 
@@ -617,7 +667,7 @@
           'fill-extrusion-color': ['get', 'smokeColor'],
           'fill-extrusion-height': ['get', 'smokeHeight'],
           'fill-extrusion-base': ['get', 'smokeBase'],
-          'fill-extrusion-opacity': ['get', 'smokeOpacity'],
+          'fill-extrusion-opacity': 0.2,
         },
       });
     }
@@ -701,7 +751,7 @@
 
         // Spawn canvas embers at screen position
         if (Math.random() > 0.6) {
-          var sp = map.project([fl.lng, fl.lat]);
+          var sp = map.project(new maplibregl.LngLat(fl.lng, fl.lat));
           if (sp) {
             particles.push({
               x: sp.x + (Math.random() - 0.5) * 30,
@@ -748,7 +798,6 @@
             smokeColor: 'rgb(' + g + ',' + g + ',' + g + ')',
             smokeHeight: sc.topHeight,
             smokeBase: sc.baseHeight,
-            smokeOpacity: sc.opacity * sc.life,
           },
           geometry: makeBox(sc.cx, sc.cy, sc.size),
         });
@@ -811,8 +860,8 @@
     document.body.appendChild(flash);
     setTimeout(function() { flash.remove(); }, 200);
 
-    // Sound — bigger buildings get heavier impact sounds
-    playCrash(height);
+    // Sound — procedural explosion scaled to building size
+    generateExplosion(height);
 
     // Add rubble — dark building shell where the real one was
     if (geom && geom.type === 'Polygon') {
