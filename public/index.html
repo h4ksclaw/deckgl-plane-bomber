@@ -821,9 +821,9 @@
       map.addLayer({
         id: 'bomb-layer', type: 'fill-extrusion', source: 'bombs',
         paint: {
-          'fill-extrusion-color': '#111',
-          'fill-extrusion-height': 8,
-          'fill-extrusion-base': 0,
+          'fill-extrusion-color': '#ff4400',
+          'fill-extrusion-height': ['get', 'bombTop'],
+          'fill-extrusion-base': ['get', 'bombBottom'],
           'fill-extrusion-opacity': 1,
         },
       });
@@ -835,7 +835,7 @@
     if (!map.getLayer('bomb-trail-layer')) {
       map.addLayer({
         id: 'bomb-trail-layer', type: 'line', source: 'bomb-trails',
-        paint: { 'line-color': '#888', 'line-width': 1, 'line-opacity': 0.3 },
+        paint: { 'line-color': '#ff6600', 'line-width': 3, 'line-opacity': 0.7 },
       });
     }
     // Red dot markers for destroyed buildings — visible at all zoom levels
@@ -1107,11 +1107,32 @@
       }
 
       alive.push(b);
+      var bombSize = 0.000012; // visible size
       bombFeatures.push({
         type: 'Feature',
-        properties: {},
-        geometry: makeBox(b.lng, b.lat, 0.000008),
+        properties: {
+          bombTop: b.alt + 5,
+          bombBottom: b.alt - 5,
+        },
+        geometry: makeBox(b.lng, b.lat, bombSize),
       });
+
+      // Spawn canvas embers behind the bomb for visibility
+      if (Math.random() > 0.3) {
+        var bsp = map.project(new maplibregl.LngLat(b.lng, b.lat));
+        if (bsp) {
+          particles.push({
+            x: bsp.x + (Math.random() - 0.5) * 8,
+            y: bsp.y + (Math.random() - 0.5) * 8,
+            vx: (Math.random() - 0.5) * 1,
+            vy: (Math.random() - 0.5) * 1,
+            size: 1.5 + Math.random() * 2,
+            color: Math.random() > 0.5 ? '#ff4400' : '#ffaa00',
+            life: 0.6, decay: 0.03, gravity: 0,
+            rotation: 0, rotSpeed: 0, type: 'ember',
+          });
+        }
+      }
 
       // Trail
       if (b.trail.length > 1) {
