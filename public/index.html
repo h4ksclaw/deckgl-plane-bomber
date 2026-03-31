@@ -750,7 +750,7 @@
         }
 
         // Spawn canvas embers at screen position
-        if (Math.random() > 0.6) {
+        if (Math.random() > 0.6 && isFinite(fl.lng) && isFinite(fl.lat)) {
           var sp = map.project(new maplibregl.LngLat(fl.lng, fl.lat));
           if (sp) {
             particles.push({
@@ -783,6 +783,7 @@
         p.size += p.growRate;
         p.life -= p.decay;
         if (p.life <= 0 || p.baseHeight > 120) continue;
+        if (!isFinite(p.cx) || !isFinite(p.cy) || p.size <= 0) continue;
         alive.push(p);
       }
       smokeColumns = alive;
@@ -807,7 +808,11 @@
   }
 
   function animateFire() {
-    updateFireSystem();
+    try {
+      updateFireSystem();
+    } catch(e) {
+      console.warn('Fire animation error:', e);
+    }
     requestAnimationFrame(animateFire);
   }
   // Start animation after map loads
@@ -889,7 +894,7 @@
       }
       cx /= coords.length;
       cy /= coords.length;
-      var boxSize = Math.max(maxX - minX, maxY - minY) * 0.35;
+      var boxSize = Math.max(0.000005, Math.max(maxX - minX, maxY - minY) * 0.35);
 
       fireLocations.push({
         lng: cx,
