@@ -566,55 +566,76 @@
       });
     }
 
-    // Fire — multiple layers for glow effect
+    // Fire — 3D extruded columns that occlude properly
     if (!map.getSource('fires')) {
       map.addSource('fires', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
       });
     }
-    // Outer glow
+    // Outer fire glow
     if (!map.getLayer('fire-glow')) {
       map.addLayer({
         id: 'fire-glow',
-        type: 'circle',
+        type: 'fill-extrusion',
         source: 'fires',
         paint: {
-          'circle-radius': 18,
-          'circle-color': '#ff2200',
-          'circle-blur': 1.5,
-          'circle-opacity': 0.3,
+          'fill-extrusion-color': '#ff3300',
+          'fill-extrusion-height': ['get', 'fireHeight'],
+          'fill-extrusion-base': 0,
+          'fill-extrusion-opacity': 0.2,
         },
       });
     }
-    // Inner fire
+    // Fire core
     if (!map.getLayer('fire-core')) {
       map.addLayer({
         id: 'fire-core',
-        type: 'circle',
+        type: 'fill-extrusion',
         source: 'fires',
         paint: {
-          'circle-radius': 6,
-          'circle-color': '#ff8800',
-          'circle-blur': 0.5,
-          'circle-opacity': 0.9,
+          'fill-extrusion-color': '#ff8800',
+          'fill-extrusion-height': ['get', 'fireHeight'],
+          'fill-extrusion-base': 0,
+          'fill-extrusion-opacity': 0.4,
         },
       });
     }
-    // Bright center
-    if (!map.getLayer('fire-hot')) {
+    // Smoke — 3D extruded columns rising from fires
+    if (!map.getSource('smoke')) {
+      map.addSource('smoke', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+    }
+    if (!map.getLayer('smoke-layer')) {
       map.addLayer({
-        id: 'fire-hot',
-        type: 'circle',
-        source: 'fires',
+        id: 'smoke-layer',
+        type: 'fill-extrusion',
+        source: 'smoke',
         paint: {
-          'circle-radius': 2,
-          'circle-color': '#ffcc00',
-          'circle-blur': 0.3,
-          'circle-opacity': 1,
+          'fill-extrusion-color': ['get', 'smokeColor'],
+          'fill-extrusion-height': ['get', 'smokeHeight'],
+          'fill-extrusion-base': ['get', 'smokeBase'],
+          'fill-extrusion-opacity': ['get', 'smokeOpacity'],
         },
       });
     }
+  }
+
+  // Helper: create a small GeoJSON polygon (box) around a point
+  function makeBox(cx, cy, size) {
+    var s = size;
+    return {
+      type: 'Polygon',
+      coordinates: [[
+        [cx - s, cy - s],
+        [cx + s, cy - s],
+        [cx + s, cy + s],
+        [cx - s, cy + s],
+        [cx - s, cy - s],
+      ]],
+    };
   }
 
   // Terrain zoom adjustment
@@ -628,27 +649,121 @@
 
   map.on('load', add3DLayers);
 
-  // Animate fire — flickering glow
+  // Animate fire — flickering 3D columns + rising smoke
   var fireTime = 0;
+  var smokeColumns = [];
+  var smokeId = 0;
+
+  function spawnSmokeColumn(cx, cy, baseSize) {
+    smokeId++;
+    var s = baseSize * (0.5 + Math.random() * 0.5);
+    smokeColumns.push({
+      id: smokeId,
+      cx: cx + (Math.random() - 0.5) * s * 2,
+      cy: cy + (Math.random() - 0.5) * s * 2,
+      baseHeight: 0,
+      topHeight: 5 + Math.random() * 10,
+      maxHeight: 40 + Math.random() * 60,
+      rise: 0.3 + Math.random() * 0.4,
+      drift: (Math.random() - 0.5) * 0.0000003,
+      size: s,
+      growSize: 0.0000002 + Math.random() * 0.0000002,
+      opacity: 0.3 + Math.random() * 0.15,
+      life: 1,
+      decay: 0.003 + Math.random() * 0.004,
+    });
+  }
+
+  function updateSmokeAndFire() {
+    var smokeSrc = map.getSource('smoke');
+    var fireSrc = map.getSource('fires');
+
+    // Animate fire height — flickering
+    if (fireSrc && fireSrc._data && fireSrc._data.features.length > 0) {
+      var updatedFires = [];
+      for (var f = 0; f < fireSrc._data.features.length; f++) {
+        var feat = fireSrc._data.features[f];
+        var baseH = feat.properties.baseFireHeight || 15;
+        var h = baseH + Math.sin(fireTime * 3 + f * 1.7) * 5 + Math.sin(fireTime * 7 + f * 0.9) * 3;
+        feat.properties.fireHeight = Math.max(2, h);
+        updatedFires.push(feat);
+
+        // Spawn smoke at each fire
+        if (Math.random() > 0.5) {
+          spawnSmokeColumn(
+            feat.geometry.coordinates[0],
+            feat.geometry.coordinates[1],
+            feat.properties.fireSize || 0.000015
+          );
+        }
+      }
+      fireSrc.setData({ type: 'FeatureCollection', features: updatedFires });
+
+      // Spawn canvas embers for each fire (screen-space sparkles)
+      for (var ef = 0; ef < updatedFires.length; ef++) {
+        if (Math.random() > 0.7) {
+          var efCoord = updatedFires[ef].geometry.coordinates;
+          var screenPos = map.project(efCoord);
+          if (screenPos) {
+            particles.push({
+              x: screenPos.x + (Math.random() - 0.5) * 20,
+              y: screenPos.y - Math.random() * 30,
+              vx: (Math.random() - 0.5) * 2,
+              vy: -1 - Math.random() * 3,
+              size: 1 + Math.random() * 2,
+              color: Math.random() > 0.5 ? '#ff6a00' : '#ffaa00',
+              life: 1,
+              decay: 0.025 + Math.random() * 0.02,
+              gravity: -0.05,
+              rotation: 0,
+              rotSpeed: 0,
+              type: 'ember',
+            });
+          }
+        }
+      }
+    }
+
+    // Update smoke columns
+    if (smokeSrc) {
+      var alive = [];
+      for (var i = 0; i < smokeColumns.length; i++) {
+        var p = smokeColumns[i];
+        p.topHeight += p.rise;
+        p.baseHeight += p.rise * 0.8;
+        p.cx += p.drift;
+        p.size += p.growSize;
+        p.opacity *= 0.997;
+        p.life -= p.decay;
+        if (p.life <= 0 || p.opacity < 0.01 || p.baseHeight > p.maxHeight) continue;
+        alive.push(p);
+      }
+      smokeColumns = alive;
+      if (smokeColumns.length > 150) smokeColumns = smokeColumns.slice(-150);
+
+      // Build smoke GeoJSON
+      var smokeFeatures = [];
+      for (var j = 0; j < smokeColumns.length; j++) {
+        var sc = smokeColumns[j];
+        var gray = Math.floor(30 + (1 - sc.life) * 60);
+        smokeFeatures.push({
+          type: 'Feature',
+          properties: {
+            smokeColor: 'rgb(' + gray + ',' + gray + ',' + gray + ')',
+            smokeHeight: sc.topHeight,
+            smokeBase: sc.baseHeight,
+            smokeOpacity: sc.opacity,
+          },
+          geometry: makeBox(sc.cx, sc.cy, sc.size),
+        });
+      }
+      smokeSrc.setData({ type: 'FeatureCollection', features: smokeFeatures });
+    }
+  }
+
   function animateFire() {
     fireTime += 0.05;
-    var glowLayer = map.getLayer('fire-glow');
-    var coreLayer = map.getLayer('fire-core');
-    var hotLayer = map.getLayer('fire-hot');
-    if (glowLayer) {
-      var glowR = 18 + Math.sin(fireTime * 2.3) * 6 + Math.sin(fireTime * 5.7) * 3;
-      var glowO = 0.25 + Math.sin(fireTime * 3.1) * 0.1;
-      map.setPaintProperty('fire-glow', 'circle-radius', glowR);
-      map.setPaintProperty('fire-glow', 'circle-opacity', glowO);
-    }
-    if (coreLayer) {
-      var coreR = 6 + Math.sin(fireTime * 4.1) * 3 + Math.cos(fireTime * 7.3) * 1.5;
-      map.setPaintProperty('fire-core', 'circle-radius', coreR);
-    }
-    if (hotLayer) {
-      var hotR = 2 + Math.sin(fireTime * 6.3) * 1.5;
-      map.setPaintProperty('fire-hot', 'circle-radius', hotR);
-    }
+    updateSmokeAndFire();
     requestAnimationFrame(animateFire);
   }
   // Start animation after map loads
@@ -716,7 +831,7 @@
       }
     }
 
-    // Add fire marker at building center
+    // Add fire at building center — 3D extruded box
     if (geom && geom.coordinates && geom.coordinates[0]) {
       var coords = geom.coordinates[0];
       var cx = 0, cy = 0;
@@ -727,10 +842,23 @@
       var fireData = map.getSource('fires');
       if (fireData) {
         var fd = fireData._data;
+        // Calculate building footprint size for fire box
+        var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (var c = 0; c < coords.length; c++) {
+          if (coords[c][0] < minX) minX = coords[c][0];
+          if (coords[c][0] > maxX) maxX = coords[c][0];
+          if (coords[c][1] < minY) minY = coords[c][1];
+          if (coords[c][1] > maxY) maxY = coords[c][1];
+        }
+        var fireSize = Math.max(maxX - minX, maxY - minY) * 0.3;
         fd.features.push({
           type: 'Feature',
-          properties: {},
-          geometry: { type: 'Point', coordinates: [cx, cy] },
+          properties: {
+            fireHeight: height * 0.4,
+            baseFireHeight: height * 0.4,
+            fireSize: fireSize,
+          },
+          geometry: makeBox(cx, cy, fireSize),
         });
         fireData.setData(fd);
       }
