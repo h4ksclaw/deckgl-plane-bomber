@@ -108,60 +108,97 @@
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script>
   // ============================================================
-  // AUDIO ENGINE — procedural sounds via Web Audio API
+  // AUDIO ENGINE — real CC0 impact sounds from Kenney
   // ============================================================
   var audioCtx = null;
+  var soundBuffers = {};
 
   function initAudio() {
     if (!audioCtx) {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      preloadSounds();
     }
   }
 
-  function playCrash(volume) {
-    if (!audioCtx) return;
-    var v = Math.min(1, volume || 0.5);
-    // White noise burst for impact
-    var bufferSize = audioCtx.sampleRate * 0.3;
-    var buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-    var data = buffer.getChannelData(0);
-    for (var i = 0; i < bufferSize; i++) {
-      var decay = Math.exp(-i / (audioCtx.sampleRate * 0.08));
-      data[i] = (Math.random() * 2 - 1) * decay;
-    }
-    var source = audioCtx.createBufferSource();
-    source.buffer = buffer;
+  function preloadSounds() {
+    // Sound categories by building size
+    var soundFiles = {
+      light:  ['sounds/impactGeneric_light_000.ogg', 'sounds/impactGeneric_light_001.ogg', 'sounds/impactGeneric_light_002.ogg', 'sounds/impactGeneric_light_003.ogg', 'sounds/impactGeneric_light_004.ogg'],
+      medium: ['sounds/impactWood_medium_000.ogg', 'sounds/impactWood_medium_001.ogg', 'sounds/impactWood_medium_002.ogg', 'sounds/impactWood_medium_003.ogg', 'sounds/impactWood_medium_004.ogg'],
+      heavy:  ['sounds/impactMetal_heavy_000.ogg', 'sounds/impactMetal_heavy_001.ogg', 'sounds/impactMetal_heavy_002.ogg', 'sounds/impactMetal_heavy_003.ogg', 'sounds/impactMetal_heavy_004.ogg', 'sounds/impactPlate_heavy_000.ogg', 'sounds/impactPlate_heavy_001.ogg', 'sounds/impactPlate_heavy_002.ogg'],
+      massive:['sounds/impactMining_000.ogg', 'sounds/impactMining_001.ogg', 'sounds/impactMining_002.ogg', 'sounds/impactMining_003.ogg', 'sounds/impactMining_004.ogg'],
+      glass:  ['sounds/impactGlass_heavy_000.ogg', 'sounds/impactGlass_heavy_001.ogg', 'sounds/impactGlass_heavy_002.ogg', 'sounds/impactGlass_heavy_003.ogg', 'sounds/impactGlass_heavy_004.ogg'],
+    };
 
-    // Low pass filter for rumble
-    var filter = audioCtx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(800, audioCtx.currentTime);
-    filter.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.3);
+    Object.keys(soundFiles).forEach(function(category) {
+      soundFiles[category].forEach(function(url, i) {
+        fetch(url)
+          .then(function(r) { return r.arrayBuffer(); })
+          .then(function(buf) { return audioCtx.decodeAudioData(buf); })
+          .then(function(decoded) {
+            if (!soundBuffers[category]) soundBuffers[category] = [];
+            soundBuffers[category].push(decoded);
+          })
+          .catch(function() {});
+      });
+    });
+  }
+
+  function playCrash(height) {
+    if (!audioCtx) return;
+    // Pick category based on building height
+    var category;
+    if (height > 150) category = 'massive';
+    else if (height > 80) category = 'heavy';
+    else if (height > 30) category = 'medium';
+    else category = 'light';
+
+    var sounds = soundBuffers[category] || [];
+    if (sounds.length === 0) return;
+
+    // Pick a random sound from the category
+    var buf = sounds[Math.floor(Math.random() * sounds.length)];
+    var source = audioCtx.createBufferSource();
+    source.buffer = buf;
+
+    // Slight pitch variation for variety
+    source.playbackRate.value = 0.9 + Math.random() * 0.2;
 
     var gain = audioCtx.createGain();
-    gain.gain.setValueAtTime(v * 0.6, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+    gain.gain.setValueAtTime(0.8, audioCtx.currentTime);
 
-    source.connect(filter);
-    filter.connect(gain);
+    source.connect(gain);
     gain.connect(audioCtx.destination);
     source.start();
+
+    // Layer a glass sound randomly for extra crunch
+    if (Math.random() > 0.5 && soundBuffers.glass && soundBuffers.glass.length > 0) {
+      var glassBuf = soundBuffers.glass[Math.floor(Math.random() * soundBuffers.glass.length)];
+      var glassSource = audioCtx.createBufferSource();
+      glassSource.buffer = glassBuf;
+      glassSource.playbackRate.value = 0.8 + Math.random() * 0.4;
+      var glassGain = audioCtx.createGain();
+      glassGain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      glassSource.connect(glassGain);
+      glassGain.connect(audioCtx.destination);
+      glassSource.start();
+    }
   }
 
   function playCombo(level) {
     if (!audioCtx) return;
-    // Ascending tone for combo
+    // Quick ascending tone for combo feedback
     var osc = audioCtx.createOscillator();
     var gain = audioCtx.createGain();
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(300 + level * 100, audioCtx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(600 + level * 150, audioCtx.currentTime + 0.15);
-    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(400 + level * 120, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(800 + level * 200, audioCtx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
     osc.connect(gain);
     gain.connect(audioCtx.destination);
     osc.start();
-    osc.stop(audioCtx.currentTime + 0.2);
+    osc.stop(audioCtx.currentTime + 0.15);
   }
 
   // ============================================================
@@ -560,8 +597,8 @@
     document.body.appendChild(flash);
     setTimeout(function() { flash.remove(); }, 200);
 
-    // Sound — louder for bigger buildings
-    playCrash(Math.min(1, height / 150));
+    // Sound — bigger buildings get heavier impact sounds
+    playCrash(height);
 
     // Add rubble footprint
     if (geom && geom.type === 'Polygon') {
