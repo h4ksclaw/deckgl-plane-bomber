@@ -3,221 +3,525 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>3D Map</title>
+  <title>KAIJU CRUSH 🦖</title>
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; cursor: crosshair; }
     #map { width: 100vw; height: 100vh; }
-    #map.satellite-mode canvas {
-      filter: brightness(1.15) contrast(1.05) saturate(1.1);
+
+    #particles {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      pointer-events: none;
+      z-index: 5;
     }
 
-    .style-switcher {
+    #hud {
       position: fixed;
-      top: 12px;
-      right: 60px;
+      top: 16px; left: 16px;
       z-index: 10;
-      display: flex;
-      gap: 6px;
-    }
-    .style-btn {
-      width: 56px;
-      height: 56px;
-      border-radius: 10px;
-      border: 2px solid rgba(255,255,255,0.15);
-      cursor: pointer;
-      overflow: hidden;
-      transition: border-color 0.2s, transform 0.15s;
-      position: relative;
-      background: #222;
-    }
-    .style-btn:hover { transform: scale(1.05); border-color: rgba(255,255,255,0.4); }
-    .style-btn.active { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.4); }
-    .style-btn .thumb {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 22px;
-    }
-    .style-btn .label {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background: rgba(0,0,0,0.6);
       color: #fff;
-      font-size: 9px;
-      text-align: center;
-      padding: 2px 0;
-      font-weight: 500;
-      letter-spacing: 0.02em;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+      pointer-events: none;
+    }
+    #hud h1 {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      margin-bottom: 4px;
+    }
+    #score {
+      font-size: 48px;
+      font-weight: 900;
+      line-height: 1;
+      transition: transform 0.1s;
+    }
+    #score.pop { transform: scale(1.2); }
+    #combo {
+      font-size: 18px;
+      font-weight: 700;
+      color: #ff6b35;
+      min-height: 24px;
+    }
+    #stats {
+      margin-top: 8px;
+      font-size: 13px;
+      opacity: 0.8;
+    }
+
+    #hint {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      padding: 8px 20px;
+      border-radius: 20px;
+      font-size: 14px;
+      pointer-events: none;
+      backdrop-filter: blur(8px);
+    }
+
+    .screen-shake {
+      animation: shake 0.3s ease-out;
+    }
+    @keyframes shake {
+      0%, 100% { transform: translate(0,0); }
+      20% { transform: translate(-8px, 4px); }
+      40% { transform: translate(6px, -6px); }
+      60% { transform: translate(-4px, 2px); }
+      80% { transform: translate(3px, -3px); }
+    }
+
+    .flash {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background: rgba(255, 150, 50, 0.3);
+      pointer-events: none;
+      z-index: 4;
+      animation: flash 0.2s ease-out forwards;
+    }
+    @keyframes flash {
+      from { opacity: 1; }
+      to { opacity: 0; }
     }
   </style>
 </head>
 <body>
   <div id="map"></div>
-  <div class="style-switcher" id="styleSwitcher"></div>
+  <canvas id="particles"></canvas>
+
+  <div id="hud">
+    <h1>🦖 KAIJU CRUSH</h1>
+    <div id="score">0</div>
+    <div id="combo"></div>
+    <div id="stats">Buildings destroyed: <span id="destroyed-count">0</span></div>
+  </div>
+
+  <div id="hint">🖱️ Click buildings to destroy them • Scroll to zoom • Drag to move</div>
 
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script>
-    var KEY = 'RaeBK7ZUPMGsXQd8JMzu';
+  // ============================================================
+  // AUDIO ENGINE — procedural sounds via Web Audio API
+  // ============================================================
+  var audioCtx = null;
 
-    var STYLES = [
-      { id: 'streets',   label: 'Streets',   style: 'https://api.maptiler.com/maps/streets-v2/style.json?key=' + KEY },
-      { id: 'satellite', label: 'Satellite', style: 'https://api.maptiler.com/maps/satellite/style.json?key=' + KEY },
-      { id: 'hybrid',    label: 'Hybrid',    style: 'https://api.maptiler.com/maps/hybrid/style.json?key=' + KEY },
-      { id: 'topo',      label: 'Topo',      style: 'https://api.maptiler.com/maps/topo-v2/style.json?key=' + KEY },
-      { id: 'outdoor',   label: 'Outdoor',   style: 'https://api.maptiler.com/maps/outdoor-v2/style.json?key=' + KEY },
-      { id: 'basic',     label: 'Basic',     style: 'https://api.maptiler.com/maps/basic-v2/style.json?key=' + KEY },
-    ];
+  function initAudio() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+  }
 
-    var currentStyleId = 'streets';
+  function playCrash(volume) {
+    if (!audioCtx) return;
+    var v = Math.min(1, volume || 0.5);
+    // White noise burst for impact
+    var bufferSize = audioCtx.sampleRate * 0.3;
+    var buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    var data = buffer.getChannelData(0);
+    for (var i = 0; i < bufferSize; i++) {
+      var decay = Math.exp(-i / (audioCtx.sampleRate * 0.08));
+      data[i] = (Math.random() * 2 - 1) * decay;
+    }
+    var source = audioCtx.createBufferSource();
+    source.buffer = buffer;
 
-    var map = new maplibregl.Map({
-      container: 'map',
-      style: STYLES[0].style,
-      center: [-73.9857, 40.7484],
-      zoom: 14,
-      pitch: 60,
-      bearing: -20,
-      maxZoom: 22,
-      maxPitch: 85,
-    });
+    // Low pass filter for rumble
+    var filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(800, audioCtx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.3);
 
-    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
-    map.addControl(new maplibregl.ScaleControl(), 'bottom-left');
+    var gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(v * 0.6, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
 
-    map.on('styleimagemissing', function(e) {
-      map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array([0,0,0,0]) });
-    });
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioCtx.destination);
+    source.start();
+  }
 
-    function add3DLayers() {
-      if (!map.getSource('terrain')) {
-        map.addSource('terrain', {
-          type: 'raster-dem',
-          url: 'https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=' + KEY,
-        });
-        map.setTerrain({ source: 'terrain', exaggeration: 1.5 });
+  function playCombo(level) {
+    if (!audioCtx) return;
+    // Ascending tone for combo
+    var osc = audioCtx.createOscillator();
+    var gain = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(300 + level * 100, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(600 + level * 150, audioCtx.currentTime + 0.15);
+    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.2);
+  }
+
+  // ============================================================
+  // PARTICLE SYSTEM — debris and explosions
+  // ============================================================
+  var particleCanvas = document.getElementById('particles');
+  var pctx = particleCanvas.getContext('2d');
+  var particles = [];
+
+  function resizeParticleCanvas() {
+    particleCanvas.width = window.innerWidth;
+    particleCanvas.height = window.innerHeight;
+  }
+  resizeParticleCanvas();
+  window.addEventListener('resize', resizeParticleCanvas);
+
+  function spawnExplosion(screenX, screenY, buildingColor, intensity) {
+    var count = 20 + Math.floor(intensity * 0.3);
+    for (var i = 0; i < count; i++) {
+      var angle = Math.random() * Math.PI * 2;
+      var speed = 2 + Math.random() * 6 * (1 + intensity / 100);
+      var size = 2 + Math.random() * 5;
+      particles.push({
+        x: screenX,
+        y: screenY,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - Math.random() * 3,
+        size: size,
+        color: buildingColor || '#b0a89c',
+        life: 1,
+        decay: 0.01 + Math.random() * 0.02,
+        gravity: 0.15,
+        rotation: Math.random() * 360,
+        rotSpeed: (Math.random() - 0.5) * 10,
+        type: Math.random() > 0.3 ? 'debris' : 'dust',
+      });
+    }
+    // Dust cloud
+    for (var j = 0; j < 15; j++) {
+      particles.push({
+        x: screenX + (Math.random() - 0.5) * 40,
+        y: screenY + (Math.random() - 0.5) * 20,
+        vx: (Math.random() - 0.5) * 3,
+        vy: -Math.random() * 2,
+        size: 10 + Math.random() * 20,
+        color: 'rgba(180,170,160,',
+        life: 1,
+        decay: 0.015 + Math.random() * 0.01,
+        gravity: -0.02,
+        type: 'dust',
+      });
+    }
+  }
+
+  function updateParticles() {
+    pctx.clearRect(0, 0, particleCanvas.width, particleCanvas.height);
+    var alive = [];
+    for (var i = 0; i < particles.length; i++) {
+      var p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += p.gravity;
+      p.vx *= 0.98;
+      p.life -= p.decay;
+      p.rotation += p.rotSpeed;
+
+      if (p.life <= 0) continue;
+      alive.push(p);
+
+      pctx.save();
+      pctx.globalAlpha = p.life;
+      pctx.translate(p.x, p.y);
+      pctx.rotate(p.rotation * Math.PI / 180);
+
+      if (p.type === 'dust') {
+        pctx.fillStyle = p.color + (p.life * 0.5) + ')';
+        pctx.beginPath();
+        pctx.arc(0, 0, p.size, 0, Math.PI * 2);
+        pctx.fill();
+      } else {
+        pctx.fillStyle = p.color;
+        pctx.shadowColor = 'rgba(255,100,30,0.5)';
+        pctx.shadowBlur = 3;
+        pctx.fillRect(-p.size/2, -p.size/2, p.size, p.size * 0.6);
       }
+      pctx.restore();
+    }
+    particles = alive;
+    requestAnimationFrame(updateParticles);
+  }
+  updateParticles();
 
-      if (!map.getSource('buildings')) {
-        map.addSource('buildings', {
-          type: 'vector',
-          url: 'https://api.maptiler.com/tiles/v3/tiles.json?key=' + KEY,
-        });
-      }
+  // ============================================================
+  // GAME STATE
+  // ============================================================
+  var score = 0;
+  var destroyed = new Set(); // set of destroyed building IDs
+  var comboCount = 0;
+  var comboTimer = null;
+  var destroyedCount = 0;
 
-      if (!map.getLayer('3d-buildings')) {
-        map.addLayer({
-          id: '3d-buildings',
-          type: 'fill-extrusion',
-          source: 'buildings',
-          'source-layer': 'building',
-          minzoom: 14,
-          paint: {
-            // Use real building colours from the tile data when available
-            // Fall back to a height-based gradient for buildings without colour data
-            'fill-extrusion-color': [
-              'case',
-              // Named CSS colours -> actual hex
-              ['==', ['get', 'colour'], 'white'],    '#f0ece8',
-              ['==', ['get', 'colour'], 'beige'],    '#e8dcc8',
-              ['==', ['get', 'colour'], 'red'],      '#b55a5a',
-              ['==', ['get', 'colour'], 'brown'],    '#8b6f5e',
-              ['==', ['get', 'colour'], 'green'],    '#7a9a6d',
-              ['==', ['get', 'colour'], 'black'],    '#3a3a3a',
-              ['==', ['get', 'colour'], 'darkgray'], '#6b6b6b',
-              ['==', ['get', 'colour'], 'lightgray'],'#d0d0d0',
-              // Has a hex colour? Use it directly
-              ['has', 'colour'],
-                ['to-color', ['get', 'colour'], '#b0a89c'],
-              // No colour data: shade by height
-              [
-                'interpolate', ['linear'], ['get', 'render_height'],
-                0,   '#c8c0b4',
-                30,  '#b0a89c',
-                80,  '#9a9088',
-                150, '#847c74',
-                300, '#6e6862',
-              ],
+  var scoreEl = document.getElementById('score');
+  var comboEl = document.getElementById('combo');
+  var destroyedEl = document.getElementById('destroyed-count');
+
+  function addScore(height, screenX, screenY) {
+    // Bigger buildings = more points
+    var points = Math.max(10, Math.floor(height / 3));
+
+    // Combo system
+    comboCount++;
+    clearTimeout(comboTimer);
+    comboTimer = setTimeout(function() { comboCount = 0; comboEl.textContent = ''; }, 1500);
+
+    if (comboCount > 1) {
+      var multiplier = Math.min(comboCount, 5);
+      points *= multiplier;
+      comboEl.textContent = '🔥 ' + comboCount + 'x COMBO! (x' + multiplier + ')';
+      playCombo(comboCount);
+    }
+
+    score += points;
+    destroyedCount++;
+
+    scoreEl.textContent = score.toLocaleString();
+    scoreEl.classList.add('pop');
+    setTimeout(function() { scoreEl.classList.remove('pop'); }, 100);
+    destroyedEl.textContent = destroyedCount;
+
+    // Floating score text
+    var floater = document.createElement('div');
+    floater.textContent = '+' + points;
+    floater.style.cssText = 'position:fixed;left:' + screenX + 'px;top:' + screenY + 'px;color:#ff6b35;font-size:20px;font-weight:800;pointer-events:none;z-index:10;text-shadow:0 2px 4px rgba(0,0,0,0.8);transition:all 0.8s ease-out;';
+    document.body.appendChild(floater);
+    requestAnimationFrame(function() {
+      floater.style.transform = 'translateY(-60px)';
+      floater.style.opacity = '0';
+    });
+    setTimeout(function() { floater.remove(); }, 800);
+  }
+
+  // ============================================================
+  // MAP SETUP
+  // ============================================================
+  var KEY = 'RaeBK7ZUPMGsXQd8JMzu';
+  var STYLE_URL = 'https://api.maptiler.com/maps/satellite/style.json?key=' + KEY;
+
+  var map = new maplibregl.Map({
+    container: 'map',
+    style: STYLE_URL,
+    center: [-73.9857, 40.7484],
+    zoom: 15.5,
+    pitch: 55,
+    bearing: -30,
+    maxZoom: 22,
+    maxPitch: 85,
+  });
+
+  map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+
+  map.on('styleimagemissing', function(e) {
+    map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array([0,0,0,0]) });
+  });
+
+  // Track destroyed buildings in a GeoJSON source for rubble
+  var rubbleFeatures = { type: 'FeatureCollection', features: [] };
+
+  function add3DLayers() {
+    if (!map.getSource('terrain')) {
+      map.addSource('terrain', {
+        type: 'raster-dem',
+        url: 'https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=' + KEY,
+      });
+      map.setTerrain({ source: 'terrain', exaggeration: 1.5 });
+    }
+
+    if (!map.getSource('buildings')) {
+      map.addSource('buildings', {
+        type: 'vector',
+        url: 'https://api.maptiler.com/tiles/v3/tiles.json?key=' + KEY,
+      });
+    }
+
+    if (!map.getLayer('3d-buildings')) {
+      map.addLayer({
+        id: '3d-buildings',
+        type: 'fill-extrusion',
+        source: 'buildings',
+        'source-layer': 'building',
+        minzoom: 14,
+        paint: {
+          'fill-extrusion-color': [
+            'case',
+            ['==', ['get', 'colour'], 'white'],    '#f0ece8',
+            ['==', ['get', 'colour'], 'beige'],    '#e8dcc8',
+            ['==', ['get', 'colour'], 'red'],      '#b55a5a',
+            ['==', ['get', 'colour'], 'brown'],    '#8b6f5e',
+            ['==', ['get', 'colour'], 'green'],    '#7a9a6d',
+            ['==', ['get', 'colour'], 'black'],    '#3a3a3a',
+            ['==', ['get', 'colour'], 'darkgray'], '#6b6b6b',
+            ['==', ['get', 'colour'], 'lightgray'],'#d0d0d0',
+            ['has', 'colour'],
+              ['to-color', ['get', 'colour'], '#b0a89c'],
+            ['interpolate', ['linear'], ['get', 'render_height'],
+              0, '#c8c0b4', 30, '#b0a89c', 80, '#9a9088', 150, '#847c74', 300, '#6e6862',
             ],
-            'fill-extrusion-height': ['get', 'render_height'],
-            'fill-extrusion-base': ['get', 'render_min_height'],
-            // Add subtle vertical shading — darker at the base, lighter at top
-            'fill-extrusion-opacity': 0.95,
-          },
-        });
+          ],
+          'fill-extrusion-height': ['get', 'render_height'],
+          'fill-extrusion-base': ['get', 'render_min_height'],
+          'fill-extrusion-opacity': 0.95,
+        },
+      });
+    }
+
+    // Rubble layer — flat footprints where buildings were destroyed
+    if (!map.getSource('rubble')) {
+      map.addSource('rubble', {
+        type: 'geojson',
+        data: rubbleFeatures,
+      });
+    }
+    if (!map.getLayer('rubble-layer')) {
+      map.addLayer({
+        id: 'rubble-layer',
+        type: 'fill',
+        source: 'rubble',
+        paint: {
+          'fill-color': '#555',
+          'fill-opacity': 0.6,
+          'fill-outline-color': '#333',
+        },
+      });
+    }
+
+    // Fire layer — glowing embers on destroyed buildings
+    if (!map.getSource('fires')) {
+      map.addSource('fires', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+    }
+    if (!map.getLayer('fire-layer')) {
+      map.addLayer({
+        id: 'fire-layer',
+        type: 'circle',
+        source: 'fires',
+        paint: {
+          'circle-radius': 8,
+          'circle-color': '#ff4500',
+          'circle-blur': 1,
+          'circle-opacity': 0.7,
+        },
+      });
+    }
+  }
+
+  // Terrain zoom adjustment
+  map.on('zoom', function() {
+    var z = map.getZoom();
+    var exag = z > 15 ? Math.max(0.3, 1.5 - (z - 15) * 0.25) : 1.5;
+    if (map.getSource('terrain')) {
+      map.setTerrain({ source: 'terrain', exaggeration: exag });
+    }
+  });
+
+  map.on('load', add3DLayers);
+
+  // ============================================================
+  // BUILDING DESTRUCTION
+  // ============================================================
+  map.on('click', function(e) {
+    initAudio();
+
+    var features = map.queryRenderedFeatures(e.point, {
+      layers: ['3d-buildings'],
+    });
+
+    if (features.length === 0) return;
+
+    var building = features[0];
+    var props = building.properties || {};
+    var height = props.render_height || 30;
+    var geom = building.geometry;
+    var id = building.id;
+
+    // Don't destroy the same building twice
+    if (destroyed.has(id)) return;
+    destroyed.add(id);
+
+    // Get building color for particles
+    var color = props.colour;
+    if (!color || ['white','beige','black','red','brown','green','darkgray','lightgray'].indexOf(color) !== -1) {
+      var colorMap = { white:'#f0ece8', beige:'#e8dcc8', red:'#b55a5a', brown:'#8b6f5e', green:'#7a9a6d', black:'#3a3a3a', darkgray:'#6b6b6b', lightgray:'#d0d0d0' };
+      color = colorMap[color] || '#b0a89c';
+    }
+
+    // Spawn explosion at click point
+    spawnExplosion(e.originalEvent.clientX, e.originalEvent.clientY, color, height);
+
+    // Screen shake
+    document.getElementById('map').classList.add('screen-shake');
+    setTimeout(function() { document.getElementById('map').classList.remove('screen-shake'); }, 300);
+
+    // Flash
+    var flash = document.createElement('div');
+    flash.className = 'flash';
+    document.body.appendChild(flash);
+    setTimeout(function() { flash.remove(); }, 200);
+
+    // Sound — louder for bigger buildings
+    playCrash(Math.min(1, height / 150));
+
+    // Add rubble footprint
+    if (geom && geom.type === 'Polygon') {
+      rubbleFeatures.features.push({
+        type: 'Feature',
+        properties: {},
+        geometry: geom,
+      });
+      if (map.getSource('rubble')) {
+        map.getSource('rubble').setData(rubbleFeatures);
       }
     }
 
-    // Reduce terrain exaggeration at high zoom (tiles only go to z14)
-    map.on('zoom', function() {
-      var z = map.getZoom();
-      var exag = z > 15 ? Math.max(0.3, 1.5 - (z - 15) * 0.25) : 1.5;
-      if (map.getSource('terrain')) {
-        map.setTerrain({ source: 'terrain', exaggeration: exag });
-      }
-    });
+    // Add fire marker at building center
+    if (geom && geom.coordinates && geom.coordinates[0]) {
+      var coords = geom.coordinates[0];
+      var cx = 0, cy = 0;
+      for (var i = 0; i < coords.length; i++) { cx += coords[i][0]; cy += coords[i][1]; }
+      cx /= coords.length;
+      cy /= coords.length;
 
-    map.on('load', add3DLayers);
-    map.on('style.load', add3DLayers);
-
-    // Style switcher
-    var COLORS = { streets: '#4a90d9', satellite: '#1a1a2e', hybrid: '#2d5a27', topo: '#d4a843', outdoor: '#5a8f5a', basic: '#e8e8e8' };
-    var ICONS  = { streets: '🏙️', satellite: '🛰️', hybrid: '🗺️', topo: '⛰️', outdoor: '🌲', basic: '📄' };
-
-    var switcher = document.getElementById('styleSwitcher');
-    STYLES.forEach(function(s, i) {
-      var btn = document.createElement('div');
-      btn.className = 'style-btn' + (i === 0 ? ' active' : '');
-
-      var thumb = document.createElement('div');
-      thumb.className = 'thumb';
-      thumb.style.background = COLORS[s.id] || '#333';
-      thumb.textContent = ICONS[s.id] || '🗺️';
-
-      var label = document.createElement('div');
-      label.className = 'label';
-      label.textContent = s.label;
-
-      btn.appendChild(thumb);
-      btn.appendChild(label);
-
-      btn.addEventListener('click', function() {
-        if (s.id === currentStyleId) return;
-        currentStyleId = s.id;
-
-        var center = map.getCenter();
-        var zoom = map.getZoom();
-        var pitch = map.getPitch();
-        var bearing = map.getBearing();
-
-        map.setStyle(s.style);
-
-        map.once('style.load', function() {
-          add3DLayers();
-          map.setCenter(center);
-          map.setZoom(zoom);
-          map.setPitch(pitch);
-          map.setBearing(bearing);
+      var fireData = map.getSource('fires');
+      if (fireData) {
+        var fd = fireData._data;
+        fd.features.push({
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'Point', coordinates: [cx, cy] },
         });
+        fireData.setData(fd);
+      }
+    }
 
-        var mapEl = document.getElementById('map');
-        if (s.id === 'satellite' || s.id === 'hybrid') {
-          mapEl.classList.add('satellite-mode');
-        } else {
-          mapEl.classList.remove('satellite-mode');
-        }
+    // Score
+    addScore(height, e.originalEvent.clientX, e.originalEvent.clientY);
 
-        document.querySelectorAll('.style-btn').forEach(function(b) { b.classList.remove('active'); });
-        btn.classList.add('active');
-      });
+    // Hide cursor briefly for "impact" feel
+    document.body.style.cursor = 'crosshair';
+  });
 
-      switcher.appendChild(btn);
+  // ============================================================
+  // CURSOR — show monster emoji on hover over buildings
+  // ============================================================
+  map.on('mousemove', function(e) {
+    var features = map.queryRenderedFeatures(e.point, {
+      layers: ['3d-buildings'],
     });
+    document.body.style.cursor = features.length > 0 ? 'pointer' : 'crosshair';
+  });
   </script>
 </body>
 </html>
