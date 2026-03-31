@@ -468,7 +468,6 @@
       map.addSource('buildings', {
         type: 'vector',
         url: 'https://api.maptiler.com/tiles/v3/tiles.json?key=' + KEY,
-        promoteId: 'id',
       });
     }
 
@@ -482,8 +481,6 @@
         paint: {
           'fill-extrusion-color': [
             'case',
-            ['boolean', ['feature-state', 'destroyed']],
-              '#444',
             ['==', ['get', 'colour'], 'white'],    '#f0ece8',
             ['==', ['get', 'colour'], 'beige'],    '#e8dcc8',
             ['==', ['get', 'colour'], 'red'],      '#b55a5a',
@@ -498,18 +495,30 @@
               0, '#c8c0b4', 30, '#b0a89c', 80, '#9a9088', 150, '#847c74', 300, '#6e6862',
             ],
           ],
-          'fill-extrusion-height': [
-            'case',
-            ['boolean', ['feature-state', 'destroyed']],
-              0,
-            ['coalesce', ['feature-state', 'height'], ['get', 'render_height']],
-          ],
-          'fill-extrusion-base': [
-            'case',
-            ['boolean', ['feature-state', 'destroyed']],
-              0,
-            ['coalesce', ['feature-state', 'base'], ['get', 'render_min_height']],
-          ],
+          'fill-extrusion-height': ['get', 'render_height'],
+          'fill-extrusion-base': ['get', 'render_min_height'],
+          'fill-extrusion-opacity': 0.95,
+        },
+      });
+    }
+
+    // Dark overlay that covers destroyed building footprints
+    // This sits on top of the 3D buildings to visually "erase" them
+    if (!map.getSource('destroyed-overlay')) {
+      map.addSource('destroyed-overlay', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+    }
+    if (!map.getLayer('destroyed-overlay-layer')) {
+      map.addLayer({
+        id: 'destroyed-overlay-layer',
+        type: 'fill-extrusion',
+        source: 'destroyed-overlay',
+        paint: {
+          'fill-extrusion-color': '#1a1a1a',
+          'fill-extrusion-height': 0.5,
+          'fill-extrusion-base': 0,
           'fill-extrusion-opacity': 0.95,
         },
       });
@@ -588,21 +597,10 @@
     var height = props.render_height || 30;
     var geom = building.geometry;
     var id = building.id;
-    var sourceLayer = building.sourceLayer || 'building';
 
     // Don't destroy the same building twice
     if (destroyed.has(id)) return;
     destroyed.add(id);
-
-    // Actually remove the 3D building from the map via feature state
-    try {
-      map.setFeatureState(
-        { source: 'buildings', sourceLayer: sourceLayer, id: id },
-        { destroyed: true }
-      );
-    } catch(e) {
-      // Feature state might not work on all sources, continue anyway
-    }
 
     // Get building color for particles
     var color = props.colour;
@@ -627,7 +625,21 @@
     // Sound — bigger buildings get heavier impact sounds
     playCrash(height);
 
-    // Add rubble footprint
+    // Add dark overlay to hide the destroyed building footprint
+    if (geom && geom.type === 'Polygon') {
+      var overlaySrc = map.getSource('destroyed-overlay');
+      if (overlaySrc) {
+        var od = overlaySrc._data;
+        od.features.push({
+          type: 'Feature',
+          properties: {},
+          geometry: geom,
+        });
+        overlaySrc.setData(od);
+      }
+    }
+
+    // Add rubble footprint (slightly transparent, shows debris texture)
     if (geom && geom.type === 'Polygon') {
       rubbleFeatures.features.push({
         type: 'Feature',
