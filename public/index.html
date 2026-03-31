@@ -179,73 +179,158 @@
   window.addEventListener('resize', resizeParticleCanvas);
 
   function spawnExplosion(screenX, screenY, buildingColor, intensity) {
-    var count = 20 + Math.floor(intensity * 0.3);
-    for (var i = 0; i < count; i++) {
-      var angle = Math.random() * Math.PI * 2;
-      var speed = 2 + Math.random() * 6 * (1 + intensity / 100);
-      var size = 2 + Math.random() * 5;
+    // Structural chunks — large pieces of the building falling apart
+    var chunkCount = 8 + Math.floor(intensity / 15);
+    for (var i = 0; i < chunkCount; i++) {
+      var angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.2;
+      var speed = 3 + Math.random() * 5 * (1 + intensity / 150);
+      var w = 6 + Math.random() * 14;
+      var h = 4 + Math.random() * (intensity / 8);
       particles.push({
-        x: screenX,
-        y: screenY,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - Math.random() * 3,
-        size: size,
+        x: screenX + (Math.random() - 0.5) * 20,
+        y: screenY + (Math.random() - 0.5) * 10,
+        vx: Math.cos(angle) * speed * (Math.random() > 0.5 ? 1 : -1),
+        vy: Math.sin(angle) * speed - Math.random() * 2,
+        w: w,
+        h: h,
         color: buildingColor || '#b0a89c',
         life: 1,
-        decay: 0.01 + Math.random() * 0.02,
-        gravity: 0.15,
+        decay: 0.006 + Math.random() * 0.008,
+        gravity: 0.35,
         rotation: Math.random() * 360,
-        rotSpeed: (Math.random() - 0.5) * 10,
-        type: Math.random() > 0.3 ? 'debris' : 'dust',
+        rotSpeed: (Math.random() - 0.5) * 15,
+        type: 'chunk',
+        bounce: 0.3 + Math.random() * 0.2,
       });
     }
-    // Dust cloud
-    for (var j = 0; j < 15; j++) {
+    // Small debris — bits and pieces
+    var debrisCount = 15 + Math.floor(intensity * 0.2);
+    for (var j = 0; j < debrisCount; j++) {
+      var a2 = Math.random() * Math.PI * 2;
+      var sp2 = 1 + Math.random() * 7;
       particles.push({
-        x: screenX + (Math.random() - 0.5) * 40,
-        y: screenY + (Math.random() - 0.5) * 20,
-        vx: (Math.random() - 0.5) * 3,
-        vy: -Math.random() * 2,
-        size: 10 + Math.random() * 20,
-        color: 'rgba(180,170,160,',
+        x: screenX + (Math.random() - 0.5) * 30,
+        y: screenY,
+        vx: Math.cos(a2) * sp2,
+        vy: Math.sin(a2) * sp2 - Math.random() * 4,
+        size: 1.5 + Math.random() * 3,
+        color: buildingColor || '#b0a89c',
         life: 1,
-        decay: 0.015 + Math.random() * 0.01,
-        gravity: -0.02,
+        decay: 0.012 + Math.random() * 0.015,
+        gravity: 0.25,
+        rotation: Math.random() * 360,
+        rotSpeed: (Math.random() - 0.5) * 12,
+        type: 'debris',
+        bounce: 0.2,
+      });
+    }
+    // Dust cloud — expands and fades
+    for (var k = 0; k < 12; k++) {
+      particles.push({
+        x: screenX + (Math.random() - 0.5) * 30,
+        y: screenY + (Math.random() - 0.5) * 15,
+        vx: (Math.random() - 0.5) * 4,
+        vy: -1 - Math.random() * 3,
+        size: 15 + Math.random() * 25,
+        color: 'rgba(160,150,140,',
+        life: 1,
+        decay: 0.01 + Math.random() * 0.008,
+        gravity: -0.03,
         type: 'dust',
+      });
+    }
+    // Embers / sparks
+    for (var m = 0; m < 8; m++) {
+      var a3 = -Math.PI / 2 + (Math.random() - 0.5) * 1;
+      particles.push({
+        x: screenX + (Math.random() - 0.5) * 15,
+        y: screenY,
+        vx: Math.cos(a3) * (2 + Math.random() * 3),
+        vy: -3 - Math.random() * 5,
+        size: 1 + Math.random() * 2,
+        color: Math.random() > 0.5 ? '#ff6a00' : '#ffaa00',
+        life: 1,
+        decay: 0.02 + Math.random() * 0.02,
+        gravity: -0.05,
+        type: 'ember',
       });
     }
   }
 
   function updateParticles() {
     pctx.clearRect(0, 0, particleCanvas.width, particleCanvas.height);
+    var groundY = particleCanvas.height;
     var alive = [];
     for (var i = 0; i < particles.length; i++) {
       var p = particles[i];
       p.x += p.vx;
       p.y += p.vy;
       p.vy += p.gravity;
-      p.vx *= 0.98;
+      p.vx *= 0.99;
       p.life -= p.decay;
       p.rotation += p.rotSpeed;
+
+      // Ground bounce for chunks and debris
+      if (p.type === 'chunk' || p.type === 'debris') {
+        if (p.y > groundY - 10) {
+          p.y = groundY - 10;
+          p.vy *= -p.bounce;
+          p.vx *= 0.8;
+          p.rotSpeed *= 0.7;
+          // Spawn tiny impact dust
+          if (Math.abs(p.vy) > 1) {
+            particles.push({
+              x: p.x,
+              y: groundY - 5,
+              vx: (Math.random() - 0.5) * 2,
+              vy: -Math.random() * 1.5,
+              size: 5 + Math.random() * 8,
+              color: 'rgba(140,130,120,',
+              life: 0.6,
+              decay: 0.03,
+              gravity: 0.02,
+              type: 'dust',
+            });
+          }
+        }
+      }
 
       if (p.life <= 0) continue;
       alive.push(p);
 
       pctx.save();
-      pctx.globalAlpha = p.life;
-      pctx.translate(p.x, p.y);
-      pctx.rotate(p.rotation * Math.PI / 180);
+      pctx.globalAlpha = Math.min(1, p.life * 1.5);
 
       if (p.type === 'dust') {
-        pctx.fillStyle = p.color + (p.life * 0.5) + ')';
+        pctx.fillStyle = p.color + (p.life * 0.4) + ')';
         pctx.beginPath();
-        pctx.arc(0, 0, p.size, 0, Math.PI * 2);
+        pctx.arc(p.x, p.y, p.size * (2 - p.life), 0, Math.PI * 2);
         pctx.fill();
-      } else {
+      } else if (p.type === 'ember') {
         pctx.fillStyle = p.color;
-        pctx.shadowColor = 'rgba(255,100,30,0.5)';
-        pctx.shadowBlur = 3;
-        pctx.fillRect(-p.size/2, -p.size/2, p.size, p.size * 0.6);
+        pctx.shadowColor = p.color;
+        pctx.shadowBlur = 6;
+        pctx.beginPath();
+        pctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        pctx.fill();
+      } else if (p.type === 'chunk') {
+        pctx.translate(p.x, p.y);
+        pctx.rotate(p.rotation * Math.PI / 180);
+        // Chunk with slight 3D shading
+        pctx.fillStyle = p.color;
+        pctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        // Darker edge for depth
+        pctx.fillStyle = 'rgba(0,0,0,0.2)';
+        pctx.fillRect(-p.w / 2, 0, p.w, p.h / 2);
+        // Light edge
+        pctx.fillStyle = 'rgba(255,255,255,0.15)';
+        pctx.fillRect(-p.w / 2, -p.h / 2, p.w, 2);
+      } else {
+        // debris
+        pctx.translate(p.x, p.y);
+        pctx.rotate(p.rotation * Math.PI / 180);
+        pctx.fillStyle = p.color;
+        pctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
       }
       pctx.restore();
     }
@@ -318,7 +403,11 @@
     bearing: -30,
     maxZoom: 22,
     maxPitch: 85,
+    doubleClickZoom: false,
   });
+
+  // Disable double-click zoom — it conflicts with rapid clicking
+  map.doubleClickZoom.disable();
 
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
 
