@@ -468,6 +468,7 @@
       map.addSource('buildings', {
         type: 'vector',
         url: 'https://api.maptiler.com/tiles/v3/tiles.json?key=' + KEY,
+        promoteId: 'id',
       });
     }
 
@@ -500,7 +501,8 @@
           'fill-extrusion-opacity': 0.95,
         },
         // Filter out destroyed buildings using feature state
-        filter: ['!=', ['boolean', ['feature-state', 'destroyed'], false], true],
+        // feature-state returns null for unset state, so we check != true
+        filter: ['!=', ['boolean', ['feature-state', 'destroyed']], true],
       });
     }
 
