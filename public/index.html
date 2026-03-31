@@ -499,6 +499,8 @@
           'fill-extrusion-base': ['get', 'render_min_height'],
           'fill-extrusion-opacity': 0.95,
         },
+        // Filter out destroyed buildings using feature state
+        filter: ['!=', ['boolean', ['feature-state', 'destroyed'], false], true],
       });
     }
 
@@ -572,10 +574,21 @@
     var height = props.render_height || 30;
     var geom = building.geometry;
     var id = building.id;
+    var sourceLayer = building.sourceLayer || 'building';
 
     // Don't destroy the same building twice
     if (destroyed.has(id)) return;
     destroyed.add(id);
+
+    // Actually remove the 3D building from the map via feature state
+    try {
+      map.setFeatureState(
+        { source: 'buildings', sourceLayer: sourceLayer, id: id },
+        { destroyed: true }
+      );
+    } catch(e) {
+      // Feature state might not work on all sources, continue anyway
+    }
 
     // Get building color for particles
     var color = props.colour;
