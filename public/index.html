@@ -201,6 +201,50 @@
     osc.stop(audioCtx.currentTime + 0.15);
   }
 
+  // Procedural fire crackle loop
+  var fireGainNode = null;
+  function startFireSound() {
+    if (!audioCtx || fireGainNode) return;
+    fireGainNode = audioCtx.createGain();
+    fireGainNode.gain.value = 0;
+    fireGainNode.connect(audioCtx.destination);
+
+    // Brown noise for rumble
+    var bufSize = audioCtx.sampleRate * 2;
+    var buf = audioCtx.createBuffer(2, bufSize, audioCtx.sampleRate);
+    for (var ch = 0; ch < 2; ch++) {
+      var data = buf.getChannelData(ch);
+      var last = 0;
+      for (var i = 0; i < bufSize; i++) {
+        var white = Math.random() * 2 - 1;
+        last = (last + 0.02 * white) / 1.02;
+        data[i] = last * 3.5;
+      }
+    }
+    var src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+
+    // Bandpass for crackle character
+    var bp = audioCtx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 800;
+    bp.Q.value = 0.5;
+
+    src.connect(bp);
+    bp.connect(fireGainNode);
+    src.start();
+
+    // Fade in
+    fireGainNode.gain.linearRampToValueAtTime(0.08, audioCtx.currentTime + 1);
+  }
+
+  function stopFireSound() {
+    if (!fireGainNode || !audioCtx) return;
+    fireGainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 1);
+    setTimeout(function() { fireGainNode = null; }, 1500);
+  }
+
   // ============================================================
   // PARTICLE SYSTEM — debris and explosions
   // ============================================================
@@ -502,29 +546,7 @@
       });
     }
 
-    // Dark overlay that covers destroyed building footprints
-    // This sits on top of the 3D buildings to visually "erase" them
-    if (!map.getSource('destroyed-overlay')) {
-      map.addSource('destroyed-overlay', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] },
-      });
-    }
-    if (!map.getLayer('destroyed-overlay-layer')) {
-      map.addLayer({
-        id: 'destroyed-overlay-layer',
-        type: 'fill-extrusion',
-        source: 'destroyed-overlay',
-        paint: {
-          'fill-extrusion-color': '#1a1a1a',
-          'fill-extrusion-height': 0.5,
-          'fill-extrusion-base': 0,
-          'fill-extrusion-opacity': 0.95,
-        },
-      });
-    }
-
-    // Rubble layer — flat footprints where buildings were destroyed
+    // Rubble layer — flat footprint marker where buildings were destroyed
     if (!map.getSource('rubble')) {
       map.addSource('rubble', {
         type: 'geojson',
@@ -537,30 +559,59 @@
         type: 'fill',
         source: 'rubble',
         paint: {
-          'fill-color': '#555',
-          'fill-opacity': 0.6,
-          'fill-outline-color': '#333',
+          'fill-color': '#333',
+          'fill-opacity': 0.4,
+          'fill-outline-color': '#555',
         },
       });
     }
 
-    // Fire layer — glowing embers on destroyed buildings
+    // Fire — multiple layers for glow effect
     if (!map.getSource('fires')) {
       map.addSource('fires', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
       });
     }
-    if (!map.getLayer('fire-layer')) {
+    // Outer glow
+    if (!map.getLayer('fire-glow')) {
       map.addLayer({
-        id: 'fire-layer',
+        id: 'fire-glow',
         type: 'circle',
         source: 'fires',
         paint: {
-          'circle-radius': 8,
-          'circle-color': '#ff4500',
-          'circle-blur': 1,
-          'circle-opacity': 0.7,
+          'circle-radius': 18,
+          'circle-color': '#ff2200',
+          'circle-blur': 1.5,
+          'circle-opacity': 0.3,
+        },
+      });
+    }
+    // Inner fire
+    if (!map.getLayer('fire-core')) {
+      map.addLayer({
+        id: 'fire-core',
+        type: 'circle',
+        source: 'fires',
+        paint: {
+          'circle-radius': 6,
+          'circle-color': '#ff8800',
+          'circle-blur': 0.5,
+          'circle-opacity': 0.9,
+        },
+      });
+    }
+    // Bright center
+    if (!map.getLayer('fire-hot')) {
+      map.addLayer({
+        id: 'fire-hot',
+        type: 'circle',
+        source: 'fires',
+        paint: {
+          'circle-radius': 2,
+          'circle-color': '#ffcc00',
+          'circle-blur': 0.3,
+          'circle-opacity': 1,
         },
       });
     }
@@ -576,6 +627,34 @@
   });
 
   map.on('load', add3DLayers);
+
+  // Animate fire — flickering glow
+  var fireTime = 0;
+  function animateFire() {
+    fireTime += 0.05;
+    var glowLayer = map.getLayer('fire-glow');
+    var coreLayer = map.getLayer('fire-core');
+    var hotLayer = map.getLayer('fire-hot');
+    if (glowLayer) {
+      var glowR = 18 + Math.sin(fireTime * 2.3) * 6 + Math.sin(fireTime * 5.7) * 3;
+      var glowO = 0.25 + Math.sin(fireTime * 3.1) * 0.1;
+      map.setPaintProperty('fire-glow', 'circle-radius', glowR);
+      map.setPaintProperty('fire-glow', 'circle-opacity', glowO);
+    }
+    if (coreLayer) {
+      var coreR = 6 + Math.sin(fireTime * 4.1) * 3 + Math.cos(fireTime * 7.3) * 1.5;
+      map.setPaintProperty('fire-core', 'circle-radius', coreR);
+    }
+    if (hotLayer) {
+      var hotR = 2 + Math.sin(fireTime * 6.3) * 1.5;
+      map.setPaintProperty('fire-hot', 'circle-radius', hotR);
+    }
+    requestAnimationFrame(animateFire);
+  }
+  // Start animation after map loads
+  map.on('load', function() {
+    setTimeout(animateFire, 500);
+  });
 
   // ============================================================
   // BUILDING DESTRUCTION
@@ -625,25 +704,11 @@
     // Sound — bigger buildings get heavier impact sounds
     playCrash(height);
 
-    // Add dark overlay to hide the destroyed building footprint
-    if (geom && geom.type === 'Polygon') {
-      var overlaySrc = map.getSource('destroyed-overlay');
-      if (overlaySrc) {
-        var od = overlaySrc._data;
-        od.features.push({
-          type: 'Feature',
-          properties: {},
-          geometry: geom,
-        });
-        overlaySrc.setData(od);
-      }
-    }
-
-    // Add rubble footprint (slightly transparent, shows debris texture)
+    // Add rubble — dark building shell where the real one was
     if (geom && geom.type === 'Polygon') {
       rubbleFeatures.features.push({
         type: 'Feature',
-        properties: {},
+        properties: { height: props.render_height || 30 },
         geometry: geom,
       });
       if (map.getSource('rubble')) {
@@ -673,6 +738,9 @@
 
     // Score
     addScore(height, e.originalEvent.clientX, e.originalEvent.clientY);
+
+    // Start ambient fire sound on first destruction
+    if (destroyedCount === 0) startFireSound();
 
     // Hide cursor briefly for "impact" feel
     document.body.style.cursor = 'crosshair';
